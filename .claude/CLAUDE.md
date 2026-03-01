@@ -77,3 +77,125 @@ When starting a new session, gather:
 5. Specific goals (full reproduction vs. understanding key parts)
 
 Then create initial progress checklist based on paper complexity.
+
+---
+
+# Project State — DMD2 + GeoLDM Molecular Generation
+
+## What This Project Is
+Integrating DMD2 (Improved Distribution Matching Distillation, NeurIPS 2024) into the
+GeoLDM backbone for one-step molecular generation on QM9.
+
+Paper: `references/DMD2.pdf`
+Base codebase: GeoLDM (E(3)-equivariant latent diffusion for molecules)
+
+## Implementation Status: COMPLETE — ready for first training run
+
+### Committed files (git log shows 5 new commits on `main`)
+| File | Purpose |
+|------|---------|
+| `equivariant_diffusion/en_diffusion.py` | `EnLatentDiffusion` DMD2 methods |
+| `dmd/discriminator.py` | `MolecularDiscriminator` (GAN discriminator) |
+| `train_dmd.py` | Full DMD2 training loop (`train_epoch`, `test`, `analyze_and_save`) |
+| `main_dmd.py` | Argument parsing, model setup, checkpoint save/resume |
+| `egnn/egnn_new.py`, `egnn/models.py` | Minor EGNN extensions |
+
+## Architecture
+```
+mu_real  (EnLatentDiffusion, FROZEN)  — teacher score model
+G        (EnLatentDiffusion, trainable dynamics only) — one-step generator
+G_ema    (EMA copy of G)
+mu_fake  (EnLatentDiffusion, fully trainable) — fake score model
+D        (MolecularDiscriminator) — hooks on mu_fake.dynamics.egnn.embedding_out
+```
+
+## Key Methods on EnLatentDiffusion (en_diffusion.py ~line 1208)
+| Method | Signature | Notes |
+|--------|-----------|-------|
+| `encode` | `(original, node_mask, edge_mask, context)` | xh tensor → latent z |
+| `corrupt` | `(t, original, n_samples, n_nodes, node_mask, edge_mask, context)` | forward-noise z_0→z_t |
+| `score` | `(t, x_t, n_samples, n_nodes, node_mask, edge_mask, context, z0=None)` | returns `(s, mu)` or `(s, mu, diffusion_loss)` if z0 given |
+| `one_step_sample` | `(n_samples, n_nodes, node_mask, edge_mask, context)` | G: z_T→xh in one step |
+
+`score(..., z0=z_fake_e_d)` runs ONE phi() forward pass and returns BOTH the
+score (for hook triggering) AND the denoising loss — avoids a redundant call.
+
+## DMD2 Training Loop (train_dmd.py, train_epoch)
+```
+G update (1×):
+  z_fake = G.one_step_sample(...)
+  z_fake_e = mu_real.encode(z_fake, ...)      # encode to latent
+  z_fake_t = mu_real.corrupt(t, z_fake_e, ...) # noise at random t
+  s_real = mu_real.score(t, z_fake_t, ...)    # frozen, under no_grad
+  s_fake, _ = mu_fake.score(t, z_fake_t, ...) # triggers hook → D captures fake features
+  d_s = (s_fake - s_real).detach()
+  L_dmd  = (d_s * z_fake_e).sum(dim=[1,2]).mean()   # Eq. 2
+  L_gan_G = -D._forward(node_mask, edge_mask).mean() # Eq. 4 (G part)
+  L_G = L_dmd + gan_coeff * L_gan_G
+
+mu_fake + D update (5× inner loop, TTUR):
+  _, _, L_fake_diffusion = mu_fake.score(t, z_fake_t_d, ..., z0=z_fake_e_d)
+  log_D_fake = D._forward(...)              # fake features
+  mu_fake.score(t, x_t, ...)               # triggers hook → D captures real features
+  log_D_real = D._forward(...)
+  L_disc = -log_D_real.mean() - log(1 - exp(log_D_fake)).mean()  # Eq. 4 (D part)
+  L_fake = L_fake_diffusion + gan_coeff * L_disc
+```
+
+## Sample Training Command
+```bash
+python main_dmd.py \
+  --exp_name dmd_qm9 \
+  --teacher_path outputs/qm9_latent2 \
+  --train_diffusion \
+  --n_epochs 200 \
+  --batch_size 64 \
+  --diffusion_steps 500 \
+  --diffusion_noise_schedule polynomial_2 \
+  --diffusion_noise_precision 1e-5 \
+  --diffusion_loss_type l2 \
+  --nf 256 \
+  --n_layers 9 \
+  --lr 1e-4 \
+  --normalize_factors [1,4,10] \
+  --test_epochs 10 \
+  --ema_decay 0.9999 \
+  --latent_nf 2 \
+  --gan_coeff 0.02 \
+  --G_lr 2e-4 \
+  --mu_fake_lr 2e-4
+
+# Quick debug run (1 batch per epoch, no wandb):
+python main_dmd.py \
+  --exp_name dmd_debug \
+  --teacher_path outputs/qm9_latent2 \
+  --train_diffusion \
+  --n_epochs 2 --batch_size 16 --diffusion_steps 100 \
+  --n_layers 4 --nf 256 --n_stability_samples 10 \
+  --test_epochs 1 --break_train_epoch True \
+  --no_wandb --save_model False
+```
+
+NOTE: `--nf` must match the teacher checkpoint's `nf` (typically 256 for QM9).
+The discriminator's `in_node_nf` is set to `args.nf` in main_dmd.py.
+
+## Discriminator Hook
+- `MolecularDiscriminator.attach_to(mu_fake)` registers on `mu_fake.dynamics.egnn.embedding_out`
+- Hook captures `input[0]` — the pre-projection hidden state `[B*N, hidden_nf]`
+- **Must re-call `discriminator.attach_to(mu_fake)` after every checkpoint resume** (hooks not saved in state_dict)
+- This is already done in main_dmd.py resume block
+
+## Known Design Decisions
+- `score()` has NO `@torch.no_grad()` — wrap mu_real calls in `torch.no_grad()` at call site
+- `corrupt()` uses `z_t = z_0 + eps * sqrt(σ_t² - σ_0²)` (marginal from σ_0, not from 0)
+- `one_step_sample()` decodes to xh space then re-encodes via `mu_real.encode()` — argmax kills categorical gradients but position (x) gradients flow to G
+- `gan_coeff` scales ONLY `L_disc`; no separate `L_GAN_mu_fake` term
+- `optim_fake_d` jointly optimizes `mu_fake.dynamics + discriminator`; GAN signal propagates to mu_fake through D's backward via the hook
+
+## test() and analyze_and_save() — NO CHANGES NEEDED
+- `test()` calls `losses.compute_loss_and_nll(args, G_ema, ...)` → calls `G_ema(x, h, ...)` → `EnLatentDiffusion.forward()` returns `[B]` NLL — works
+- `analyze_and_save()` calls `qm9.sampling.sample(..., G_ema, ...)` → calls `G_ema.sample(...)` — `EnLatentDiffusion.sample()` is implemented — works
+
+## Next Step: First Training Run
+Switch to a machine with GPU. Run the debug command above first to verify no shape errors,
+then launch the full training command. The teacher checkpoint at `--teacher_path` must exist.
