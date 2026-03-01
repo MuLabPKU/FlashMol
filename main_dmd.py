@@ -357,6 +357,7 @@ else:
 
 if prop_dist is not None:
     prop_dist.set_normalizer(property_norms)
+mu_real = mu_real.to(device)
 G = G.to(device)
 mu_fake = mu_fake.to(device)
 

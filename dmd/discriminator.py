@@ -56,7 +56,8 @@ class MolecularDiscriminator(nn.Module):
 
         h = h.view(bs * n_nodes, -1).clone() * node_mask_flat   # [B*N, in_node_nf]
 
-        h = self.gnn(h, edges, node_mask=node_mask_flat, edge_mask=edge_mask_flat)
+        h = self.gnn(h, edges, edge_attr=edge_mask_flat,
+                     node_mask=node_mask_flat, edge_mask=edge_mask_flat)
                                                                  # [B*N, in_node_nf]
         h = h.view(bs, n_nodes, -1)                             # [B, N, in_node_nf]
         h = h.sum(dim=1, keepdim=True) / atom_num               # [B, 1, in_node_nf]

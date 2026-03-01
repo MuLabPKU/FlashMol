@@ -1244,7 +1244,12 @@ class EnLatentDiffusion(EnVariationalDiffusion):
             z = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
         z_T = z
         z0 = self.sample_p0_from_pT(z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise)
-        x, h = super().sample_p_xh_given_z0(z0, node_mask, edge_mask, context, fix_noise)
+        # Sample in latent space at t=0 (phi refinement + σ₀ noise) via the override.
+        # The override returns latent-space x and h (h['integer']=[B,N,latent_nf], h['categorical']=zeros(0)).
+        x_latent, h_latent = self.sample_p_xh_given_z0(z0, node_mask, edge_mask, context, fix_noise)
+        z0_sampled = torch.cat([x_latent, h_latent['integer']], dim=2)  # [B, N, 3+latent_nf]
+        # Decode sampled latent to original data space via VAE decoder.
+        x, h = self.vae.decode(z0_sampled, node_mask, edge_mask, context)
         xh = torch.cat([x, h['categorical'].float(), h['integer'].float()], dim=2)
 
         xh = xh * node_mask
