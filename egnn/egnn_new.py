@@ -109,6 +109,10 @@ class EquivariantBlock(nn.Module):
     def __init__(self, hidden_nf, edge_feat_nf=2, device='cpu', act_fn=nn.SiLU(), n_layers=2, attention=True,
                  norm_diff=True, tanh=False, coords_range=15, norm_constant=1, sin_embedding=None,
                  normalization_factor=100, aggregation_method='sum'):
+        # edge_feat_nf controls the number of Edge attributes(including dij) in each layer <-> edges_in_d
+        # n_layers here controls the number of layers in each block
+        # note the default choice is in/out/hidden = hidden_nf throughout the network
+        # note the dimension of x is equal to hidden_nf
         super(EquivariantBlock, self).__init__()
         self.hidden_nf = hidden_nf
         self.device = device
@@ -171,6 +175,7 @@ class EGNN(nn.Module):
 
         self.embedding = nn.Linear(in_node_nf, self.hidden_nf)
         self.embedding_out = nn.Linear(self.hidden_nf, out_node_nf)
+        # x is operated as a hidden_nf-dimensional vector (passed through the encoder)
         for i in range(0, n_layers):
             self.add_module("e_block_%d" % i, EquivariantBlock(hidden_nf, edge_feat_nf=edge_feat_nf, device=device,
                                                                act_fn=act_fn, n_layers=inv_sublayers,

@@ -12,6 +12,7 @@ class EGNN_dynamics_QM9(nn.Module):
                  condition_time=True, tanh=False, mode='egnn_dynamics', norm_constant=0,
                  inv_sublayers=2, sin_embedding=False, normalization_factor=100, aggregation_method='sum'):
         super().__init__()
+        # if condition on time, in_node_nf should be manually computed
         self.mode = mode
         if mode == 'egnn_dynamics':
             self.egnn = EGNN(
@@ -101,6 +102,7 @@ class EGNN_dynamics_QM9(nn.Module):
             print('Warning: detected nan, resetting EGNN output to zero.')
             vel = torch.zeros_like(vel)
 
+        # remember to remove the mean after each computation! the output is the vel (delta x) instead of x
         if node_mask is None:
             vel = remove_mean(vel)
         else:
