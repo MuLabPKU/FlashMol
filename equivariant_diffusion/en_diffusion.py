@@ -759,7 +759,7 @@ class EnVariationalDiffusion(torch.nn.Module):
         z = torch.cat([z_x, z_h], dim=2)
         return z
 
-    @torch.no_grad()
+    # Sampling grad is required in DMD loss
     def sample(self, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False):
         """
         Draw samples from the generative model.
@@ -794,7 +794,7 @@ class EnVariationalDiffusion(torch.nn.Module):
 
         return x, h
 
-    @torch.no_grad()
+    # Sampling grad is required in DMD loss
     def sample_chain(self, n_samples, n_nodes, node_mask, edge_mask, context, keep_frames=None):
         """
         Draw samples from the generative model, keep the intermediate states for visualization purposes.
@@ -1190,7 +1190,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
 
         return neg_log_pxh
     
-    @torch.no_grad()
+    # DMD requires grad
     def sample(self, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False):
         """
         Draw samples from the generative model.
@@ -1202,8 +1202,114 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         x, h = self.vae.decode(z_xh, node_mask, edge_mask, context)
 
         return x, h
+
+    # Encoding using its corresponding VAE
+
+    def encode(self, original, node_mask, edge_mask, context) :
+        x = original[:, :, :self.n_dims]
+        h = {'categorical': original[:, :, self.n_dims:self.n_dims + self.num_classes],
+             'integer':     original[:, :, self.n_dims + self.num_classes:]}
+        x_mu, x_sig, h_mu, h_sig = self.vae.encode(x, h, node_mask, edge_mask, context)
+        mu = torch.cat([x_mu, h_mu], dim=2)
+        sig = torch.cat([x_sig, h_sig], dim=2)
+        encoded = self.vae.sample_normal(mu, sig, node_mask)
+        encoded = encoded * node_mask
+        return encoded
+
+    # One step generation method for student model G (with grad!)
+
+    def sample_p0_from_pT(self, z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
+        T = torch.full((n_samples, 1), fill_value=self.T, device=z_T.device)
+        t0 = torch.zeros(n_samples, 1, device=z_T.device)
+        gamma_T = self.gamma(T)
+        gamma_0 = self.gamma(t0)
+        eps_T = self.phi(z_T, T, node_mask, edge_mask, context)
+
+        sigma2_T_given_s, sigma_T_given_s, alpha_T_given_s = \
+            self.sigma_and_alpha_t_given_s(gamma_T, gamma_0, z_T) 
+        sigma_0 = self.sigma(gamma_0, target_tensor=z_T)
+        sigma_t = self.sigma(gamma_T, target_tensor=z_T)
+
+        diffusion_utils.assert_mean_zero_with_mask(z_T[:, :, :self.n_dims], node_mask)
+        diffusion_utils.assert_mean_zero_with_mask(eps_T[:, :, :self.n_dims], node_mask)
+        mu = z_T / alpha_T_given_s - (sigma2_T_given_s / alpha_T_given_s / sigma_t) * eps_T
+        mu = mu * node_mask 
+        return mu
     
-    @torch.no_grad()
+    def one_step_sample(self, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
+        if fix_noise:
+            # Noise is broadcasted over the batch axis, useful for visualizations.
+            z = super().sample_combined_position_feature_noise(1, n_nodes, node_mask)
+        else:
+            z = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
+        z_T = z
+        z0 = self.sample_p0_from_pT(z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise)
+        x, h = super().sample_p_xh_given_z0(z0, node_mask, edge_mask, context, fix_noise)
+        xh = torch.cat([x, h['categorical'].float(), h['integer'].float()], dim=2)
+
+        xh = xh * node_mask
+
+        return xh
+    
+    def corrupt(self, t, original, n_samples, n_nodes, node_mask, edge_mask, context) :
+        t0 = torch.zeros(n_samples, 1, device=original.device)
+        gamma_t = self.gamma(t)
+        gamma_0 = self.gamma(t0)
+        sigma2_t_given_0, sigma_t_given_0, alpha_T_given_0 = \
+            self.sigma_and_alpha_t_given_s(gamma_t, gamma_0, original) 
+        sigma_0 = self.sigma(gamma_0, target_tensor=original)
+        sigma_t = self.sigma(gamma_t, target_tensor=original)
+        d_sigma = torch.sqrt(- sigma_0 ** 2 + sigma_t ** 2)
+        noise = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
+        zt = original + noise * d_sigma
+        zt = zt * node_mask
+        return zt
+
+    def score(self, t, x_t, n_samples, n_nodes, node_mask, edge_mask, context, z0=None) :
+        """
+        Compute the score (and optionally the denoising loss) for x_t.
+
+        Args:
+            z0: optional [B, N, latent_nf] — the clean latent used to produce x_t via corrupt().
+                When provided, the denoising loss is computed from the same forward pass,
+                avoiding a second call to phi(). The recovered noise is
+                  eps = (x_t - z0) / sigma_t_given_s
+                which matches the corrupt() formula  z_t = z0 + eps * sigma_t_given_s.
+
+        Returns:
+            (s, mu)                    if z0 is None
+            (s, mu, diffusion_loss)    if z0 is provided
+        """
+        t0 = torch.zeros(n_samples, 1, device=x_t.device)
+        gamma_0 = self.gamma(t0)
+        gamma_t = self.gamma(t)
+
+        sigma2_t_given_s, sigma_t_given_s, alpha_t_given_s = \
+            self.sigma_and_alpha_t_given_s(gamma_t, gamma_0, x_t)
+
+        sigma_t = self.sigma(gamma_t, target_tensor=x_t)
+        alpha_t = self.alpha(gamma_t, x_t)
+
+        # Single neural net forward pass.
+        eps_t = self.phi(x_t, t, node_mask, edge_mask, context)
+
+        # Compute mu for p(zs | zt).
+        diffusion_utils.assert_mean_zero_with_mask(x_t[:, :, :self.n_dims], node_mask)
+        diffusion_utils.assert_mean_zero_with_mask(eps_t[:, :, :self.n_dims], node_mask)
+        mu = x_t / alpha_t_given_s - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_t
+
+        # Tweedie's formula for the score.
+        s = - (x_t - alpha_t * mu) / sigma_t ** 2
+
+        if z0 is not None:
+            # Recover the noise that corrupt() used: z_t = z0 + eps * sigma_t_given_s
+            recovered_eps = (x_t - z0) / (sigma_t_given_s + 1e-8)
+            diffusion_loss = self.compute_error(eps_t, gamma_t, recovered_eps).mean()
+            return s, mu, diffusion_loss
+
+        return s, mu
+
+    # DMD requires grad
     def sample_chain(self, n_samples, n_nodes, node_mask, edge_mask, context, keep_frames=None):
         """
         Draw samples from the generative model, keep the intermediate states for visualization purposes.
