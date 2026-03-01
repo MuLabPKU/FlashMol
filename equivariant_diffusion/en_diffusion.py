@@ -1211,15 +1211,15 @@ class EnLatentDiffusion(EnVariationalDiffusion):
              'integer':     original[:, :, self.n_dims + self.num_classes:]}
         x_mu, x_sig, h_mu, h_sig = self.vae.encode(x, h, node_mask, edge_mask, context)
         mu = torch.cat([x_mu, h_mu], dim=2)
-        sig = torch.cat([x_sig, h_sig], dim=2)
-        encoded = self.vae.sample_normal(mu, sig, node_mask)
+        sig = torch.cat([x_sig.expand(-1, -1, self.n_dims), h_sig], dim=2)
+        encoded = self.sample_normal(mu, sig, node_mask)
         encoded = encoded * node_mask
         return encoded
 
     # One step generation method for student model G (with grad!)
 
     def sample_p0_from_pT(self, z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
-        T = torch.full((n_samples, 1), fill_value=self.T, device=z_T.device)
+        T = torch.ones((n_samples, 1), device=z_T.device)   # normalized max time = 1.0
         t0 = torch.zeros(n_samples, 1, device=z_T.device)
         gamma_T = self.gamma(T)
         gamma_0 = self.gamma(t0)
