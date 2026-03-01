@@ -1,0 +1,305 @@
+import wandb
+from equivariant_diffusion.utils import assert_mean_zero_with_mask, remove_mean_with_mask, \
+    assert_correctly_masked, sample_center_gravity_zero_gaussian_with_mask
+import numpy as np
+import qm9.visualizer as vis
+from qm9.analyze import analyze_stability_for_molecules
+from qm9.sampling import sample_chain, sample, sample_sweep_conditional
+import utils
+import qm9.utils as qm9utils
+import time
+import torch
+from equivariant_diffusion import utils as diffusion_utils
+
+
+def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discriminator,
+                ema, device, dtype, property_norms, nodes_dist, gradnorm_queue,
+                dataset_info, prop_dist, optim_G, optim_fake_d, gan_coeff):
+
+    T = mu_real.T
+    Tmin = max(1, int(0.02 * T))
+    Tmax = int(0.98 * T)
+
+    G_dp.train()
+    G.train()
+    mu_fake.train()
+    loss_epoch = []
+    n_iterations = len(loader)
+    for i, data in enumerate(loader):
+        x = data['positions'].to(device, dtype)
+        node_mask = data['atom_mask'].to(device, dtype).unsqueeze(2)
+        edge_mask = data['edge_mask'].to(device, dtype)
+        one_hot = data['one_hot'].to(device, dtype)
+        charges = (data['charges'] if args.include_charges else torch.zeros(0)).to(device, dtype)
+
+        x = remove_mean_with_mask(x, node_mask)
+
+        if args.augment_noise > 0:
+            eps = sample_center_gravity_zero_gaussian_with_mask(x.size(), x.device, node_mask)
+            x = x + eps * args.augment_noise
+
+        x = remove_mean_with_mask(x, node_mask)
+        if args.data_augmentation:
+            x = utils.random_rotation(x).detach()
+
+        check_mask_correct([x, one_hot, charges], node_mask)
+        assert_mean_zero_with_mask(x, node_mask)
+
+        h = {'categorical': one_hot, 'integer': charges}
+
+        if len(args.conditioning) > 0:
+            context = qm9utils.prepare_context(args.conditioning, data, property_norms).to(device, dtype)
+            assert_correctly_masked(context, node_mask)
+        else:
+            context = None
+
+        bs_data, n_data, _ = x.shape
+
+        # ================================================================
+        # Encode real data once (no grad needed, mu_real is frozen).
+        # x_xh: [B, N, n_dims + in_node_nf] concatenated real molecule.
+        # ================================================================
+        with torch.no_grad():
+            x_xh = torch.cat([x, one_hot, charges if charges.dim() == 3
+                               else charges.unsqueeze(2)], dim=2) if args.include_charges \
+                else torch.cat([x, one_hot], dim=2)
+            x_e = mu_real.encode(x_xh, node_mask, edge_mask, context)   # [B, N, latent_nf]
+
+        # ================================================================
+        # Sample timestep t ∈ [Tmin, Tmax] (normalised to [0,1]).
+        # ================================================================
+        t_int = torch.randint(Tmin, Tmax, (bs_data, 1), device=device).float()
+        noise_t = t_int / T                                               # [B, 1]
+
+        # ================================================================
+        # GENERATOR UPDATE
+        # 1. Sample z_fake from G (gradient flows back through here).
+        # 2. Encode to latent, corrupt, compute scores.
+        # 3. DMD loss + GAN generator loss → update G.
+        # ================================================================
+        z_fake = G.one_step_sample(bs_data, n_data, node_mask, edge_mask, context)
+        z_fake_e = mu_real.encode(z_fake, node_mask, edge_mask, context)  # [B, N, latent_nf]
+
+        z_fake_t = mu_real.corrupt(noise_t, z_fake_e, bs_data, n_data, node_mask, edge_mask, context)
+
+        with torch.no_grad():
+            s_real, _ = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
+
+        # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
+        s_fake, _ = mu_fake.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
+
+        # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
+        d_s = (s_fake - s_real).detach()
+        L_dmd = (d_s * z_fake_e).sum(dim=[1, 2]).mean()
+
+        # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
+        L_gan_G = -discriminator._forward(node_mask, edge_mask).mean()
+
+        L_G = L_dmd + gan_coeff * L_gan_G
+
+        optim_G.zero_grad()
+        L_G.backward()
+        if args.clip_grad:
+            utils.gradient_clipping(G, gradnorm_queue)
+        optim_G.step()
+
+        # ================================================================
+        # MU_FAKE + DISCRIMINATOR UPDATE  (5 inner steps per 1 G step)
+        # mu_fake is trained to denoise fake samples (diffusion loss).
+        # D is trained to distinguish real from fake mu_fake features.
+        # gan_coeff scales L_disc only; no separate mu_fake GAN term.
+        # ================================================================
+        z_fake_e_d = z_fake_e.detach()
+        z_fake_t_d = z_fake_t.detach()
+        x_e_d      = x_e.detach()
+
+        for _ in range(5):
+            # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
+            # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
+            _, _, L_fake_diffusion = mu_fake.score(
+                noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context,
+                z0=z_fake_e_d)
+            log_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
+
+            # mu_fake forward on real x_t → hook captures real bottleneck features
+            x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
+            mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
+            log_D_real = discriminator._forward(node_mask, edge_mask)     # log D(real) [B]
+
+            # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
+            L_disc = -log_D_real.mean() \
+                     - torch.log(1.0 - torch.exp(log_D_fake) + 1e-8).mean()
+
+            L_fake = L_fake_diffusion + gan_coeff * L_disc
+
+            optim_fake_d.zero_grad()
+            L_fake.backward()
+            optim_fake_d.step()
+
+        # ================================================================
+        # EMA update on G
+        # ================================================================
+        if ema is not None:
+            ema.update_model_average(G_ema, G)
+
+        loss_epoch.append(L_G.item())
+
+        if i % args.n_report_steps == 0:
+            print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
+                  f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
+                  f"L_disc: {L_disc.item():.4f}")
+
+        if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
+                and not (epoch == 0 and i == 0) and epoch >= 8 and args.train_diffusion:
+            start = time.time()
+            if len(args.conditioning) > 0:
+                save_and_sample_conditional(args, device, G_ema, prop_dist, dataset_info, epoch=epoch)
+            save_and_sample_chain(G_ema, args, device, dataset_info, prop_dist,
+                                  epoch=epoch, batch_id=str(i))
+            sample_different_sizes_and_save(G_ema, nodes_dist, args, device, dataset_info,
+                                            prop_dist, epoch=epoch)
+            print(f'Sampling took {time.time() - start:.2f} seconds')
+
+            vis.visualize(f"outputs/{args.exp_name}/epoch_{epoch}_{i}", dataset_info=dataset_info, wandb=wandb)
+            vis.visualize_chain(f"outputs/{args.exp_name}/epoch_{epoch}_{i}/chain/", dataset_info, wandb=wandb)
+            if len(args.conditioning) > 0:
+                vis.visualize_chain("outputs/%s/epoch_%d/conditional/" % (args.exp_name, epoch),
+                                    dataset_info, wandb=wandb, mode='conditional')
+
+        if args.break_train_epoch:
+            break
+    wandb.log({"Train Epoch Loss": np.mean(loss_epoch) if loss_epoch else float('nan')}, commit=False)
+
+
+def encode_to_latent_space(model, x, h, node_mask, edge_mask, context):
+    # Encode data to latent space.
+    z_x_mu, z_x_sigma, z_h_mu, z_h_sigma = model.vae.encode(x, h, node_mask, edge_mask, context)
+    # Compute fixed sigma values.
+    t_zeros = torch.zeros(size=(x.size(0), 1), device=x.device)
+    model.gamma.to('cuda')
+    gamma_0 = model.inflate_batch_array(model.gamma(t_zeros), x)
+    sigma_0 = model.sigma(gamma_0, x)
+
+    # Infer latent z.
+    z_xh_mean = torch.cat([z_x_mu, z_h_mu], dim=2)
+    diffusion_utils.assert_correctly_masked(z_xh_mean, node_mask)
+    z_xh_sigma = sigma_0
+    z_xh = model.vae.sample_normal(z_xh_mean, z_xh_sigma, node_mask)
+    z_xh = z_xh.detach()  # Always keep the encoder fixed.
+    diffusion_utils.assert_correctly_masked(z_xh, node_mask)
+
+    z_x = z_xh[:, :, :model.n_dims]
+    z_h = z_xh[:, :, model.n_dims:]
+    diffusion_utils.assert_mean_zero_with_mask(z_x, node_mask)
+    # Make the data structure compatible with the EnVariationalDiffusion compute_loss().
+    z_h = {'categorical': torch.zeros(0).to(z_h), 'integer': z_h}
+
+    return z_x, z_h
+
+
+def denoise_step(model, z_t, alpha_t, sigma_t, t, node_mask, edge_mask, context):
+    """Tweedie denoising: x̂_0 = (z_t - σ_t·ε_pred) / α_t"""
+    return (z_t / alpha_t) - (model.phi(z_t, t, node_mask, edge_mask, context) * (sigma_t / alpha_t))
+
+
+def check_mask_correct(variables, node_mask):
+    for variable in variables:
+        if len(variable) > 0:
+            assert_correctly_masked(variable, node_mask)
+
+
+def test(args, loader, epoch, eval_model, device, dtype, property_norms, nodes_dist, partition='Test'):
+    from qm9 import losses
+    eval_model.eval()
+    with torch.no_grad():
+        loss_epoch = 0
+        n_samples = 0
+
+        n_iterations = len(loader)
+
+        for i, data in enumerate(loader):
+            x = data['positions'].to(device, dtype)
+            batch_size = x.size(0)
+            node_mask = data['atom_mask'].to(device, dtype).unsqueeze(2)
+            edge_mask = data['edge_mask'].to(device, dtype)
+            one_hot = data['one_hot'].to(device, dtype)
+            charges = (data['charges'] if args.include_charges else torch.zeros(0)).to(device, dtype)
+
+            if args.augment_noise > 0:
+                eps = sample_center_gravity_zero_gaussian_with_mask(x.size(), x.device, node_mask)
+                x = x + eps * args.augment_noise
+
+            x = remove_mean_with_mask(x, node_mask)
+            check_mask_correct([x, one_hot, charges], node_mask)
+            assert_mean_zero_with_mask(x, node_mask)
+
+            h = {'categorical': one_hot, 'integer': charges}
+
+            if len(args.conditioning) > 0:
+                context = qm9utils.prepare_context(args.conditioning, data, property_norms).to(device, dtype)
+                assert_correctly_masked(context, node_mask)
+            else:
+                context = None
+
+            loss, _, _ = losses.compute_loss_and_nll(args, eval_model, nodes_dist, x, h,
+                                                     node_mask, edge_mask, context)
+            loss_epoch += loss.item() * batch_size
+            n_samples += batch_size
+            if i % args.n_report_steps == 0:
+                print(f"\r {partition} NLL \t epoch: {epoch}, iter: {i}/{n_iterations}, "
+                      f"NLL: {loss_epoch/n_samples:.2f}")
+
+    return loss_epoch / n_samples
+
+
+def save_and_sample_chain(model, args, device, dataset_info, prop_dist,
+                          epoch=0, id_from=0, batch_id=''):
+    one_hot, charges, x = sample_chain(args=args, device=device, flow=model,
+                                       n_tries=1, dataset_info=dataset_info, prop_dist=prop_dist)
+    vis.save_xyz_file(f'outputs/{args.exp_name}/epoch_{epoch}_{batch_id}/chain/',
+                      one_hot, charges, x, dataset_info, id_from, name='chain')
+    return one_hot, charges, x
+
+
+def sample_different_sizes_and_save(model, nodes_dist, args, device, dataset_info, prop_dist,
+                                    n_samples=5, epoch=0, batch_size=100, batch_id=''):
+    batch_size = min(batch_size, n_samples)
+    for counter in range(int(n_samples / batch_size)):
+        nodesxsample = nodes_dist.sample(batch_size)
+        one_hot, charges, x, node_mask = sample(args, device, model, prop_dist=prop_dist,
+                                                 nodesxsample=nodesxsample,
+                                                 dataset_info=dataset_info)
+        print(f"Generated molecule: Positions {x[:-1, :, :]}")
+        vis.save_xyz_file(f'outputs/{args.exp_name}/epoch_{epoch}_{batch_id}/',
+                          one_hot, charges, x, dataset_info, batch_size * counter, name='molecule')
+
+
+def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info, prop_dist,
+                     n_samples=10, batch_size=100):
+    print(f'Analyzing molecule stability at epoch {epoch}...')
+    batch_size = min(batch_size, n_samples)
+    assert n_samples % batch_size == 0
+    molecules = {'one_hot': [], 'x': [], 'node_mask': []}
+    for i in range(int(n_samples / batch_size)):
+        nodesxsample = nodes_dist.sample(batch_size)
+        one_hot, charges, x, node_mask = sample(args, device, model_sample, dataset_info, prop_dist,
+                                                 nodesxsample=nodesxsample)
+        molecules['one_hot'].append(one_hot.detach().cpu())
+        molecules['x'].append(x.detach().cpu())
+        molecules['node_mask'].append(node_mask.detach().cpu())
+
+    molecules = {key: torch.cat(molecules[key], dim=0) for key in molecules}
+    validity_dict, rdkit_tuple = analyze_stability_for_molecules(molecules, dataset_info)
+
+    wandb.log(validity_dict)
+    if rdkit_tuple is not None:
+        wandb.log({'Validity': rdkit_tuple[0][0], 'Uniqueness': rdkit_tuple[0][1], 'Novelty': rdkit_tuple[0][2]})
+    return validity_dict
+
+
+def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, epoch=0, id_from=0):
+    one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist)
+    vis.save_xyz_file(
+        'outputs/%s/epoch_%d/conditional/' % (args.exp_name, epoch),
+        one_hot, charges, x, dataset_info, id_from, name='conditional', node_mask=node_mask)
+    return one_hot, charges, x
