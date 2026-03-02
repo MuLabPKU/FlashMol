@@ -14,7 +14,8 @@ from equivariant_diffusion import utils as diffusion_utils
 
 def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discriminator,
                 ema, device, dtype, property_norms, nodes_dist, gradnorm_queue,
-                dataset_info, prop_dist, optim_G, optim_fake_d, gan_coeff):
+                dataset_info, prop_dist, optim_G, optim_fake_d, gan_coeff,
+                reg_coeff=0.1):
 
     T = mu_real.T
     Tmin = max(1, int(0.2 * T))
@@ -95,10 +96,14 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         d_s = (s_fake - s_real).detach()
         L_dmd = (d_s * z_fake_e).sum(dim=[1, 2]).mean()
 
+        # Latent scale regularization: penalize z_fake_e variance mismatch with real latents
+        L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
+                 - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
+
         # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
         L_gan_G = -discriminator._forward(node_mask, edge_mask).mean()
 
-        L_G = L_dmd + gan_coeff * L_gan_G
+        L_G = L_dmd + gan_coeff * L_gan_G + reg_coeff * L_reg
 
         optim_G.zero_grad()
         L_G.backward()
@@ -146,7 +151,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         if i % args.n_report_steps == 0:
             print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
-                  f"L_disc: {L_disc.item():.4f}")
+                  f"L_disc: {L_disc.item():.4f}, L_reg: {L_reg.item():.4f}")
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
                 and not (epoch == 0 and i == 0) and epoch >= 8 and args.train_diffusion:

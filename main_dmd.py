@@ -47,6 +47,7 @@ parser.add_argument('--trainable_ae', action='store_true',
 
 # GAN args
 parser.add_argument('--gan_coeff', type=float, default=0.02)
+parser.add_argument('--reg_coeff', type=float, default=0)
 
 # VAE args
 parser.add_argument('--latent_nf', type=int, default=4,
@@ -512,7 +513,8 @@ def main():
                     ema=ema, device=device, dtype=dtype,
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
-                    optim_G=optim_G, optim_fake_d=optim_fake_d, prop_dist=prop_dist, gan_coeff=args.gan_coeff)
+                    optim_G=optim_G, optim_fake_d=optim_fake_d, prop_dist=prop_dist,
+                    gan_coeff=args.gan_coeff, reg_coeff=args.reg_coeff)
 
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 

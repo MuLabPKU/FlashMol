@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append('/Users/wesleysylvan/Documents/Documents/ML/Preliminaries/Survey/Week_4/DMDMolGen')
+
 from equivariant_diffusion import utils
 import numpy as np
 import math
@@ -1220,14 +1224,16 @@ class EnLatentDiffusion(EnVariationalDiffusion):
 
     def sample_p0_from_pT(self, z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
         T = torch.ones((n_samples, 1), device=z_T.device)   # normalized max time = 1.0
-        t0 = torch.zeros(n_samples, 1, device=z_T.device)
+        t_minus_one = self.T - 1
+        t_minus_one = t_minus_one / self.T
+        s = torch.full_like(T, t_minus_one, device=z_T.device)
         gamma_T = self.gamma(T)
-        gamma_0 = self.gamma(t0)
+        gamma_s = self.gamma(s)
         eps_T = self.phi(z_T, T, node_mask, edge_mask, context)
 
         sigma2_T_given_s, sigma_T_given_s, alpha_T_given_s = \
-            self.sigma_and_alpha_t_given_s(gamma_T, gamma_0, z_T) 
-        sigma_0 = self.sigma(gamma_0, target_tensor=z_T)
+            self.sigma_and_alpha_t_given_s(gamma_T, gamma_s, z_T) 
+        sigma_s = self.sigma(gamma_s, target_tensor=z_T)
         sigma_t = self.sigma(gamma_T, target_tensor=z_T)
 
         diffusion_utils.assert_mean_zero_with_mask(z_T[:, :, :self.n_dims], node_mask)
