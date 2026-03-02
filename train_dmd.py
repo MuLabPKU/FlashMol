@@ -17,7 +17,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                 dataset_info, prop_dist, optim_G, optim_fake_d, gan_coeff):
 
     T = mu_real.T
-    Tmin = max(1, int(0.02 * T))
+    Tmin = max(1, int(0.2 * T))
     Tmax = int(0.98 * T)
 
     G_dp.train()
