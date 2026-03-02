@@ -150,7 +150,6 @@ python main_dmd.py \
   --train_diffusion \
   --n_epochs 200 \
   --batch_size 64 \
-  --diffusion_steps 500 \
   --diffusion_noise_schedule polynomial_2 \
   --diffusion_noise_precision 1e-5 \
   --diffusion_loss_type l2 \
@@ -170,7 +169,7 @@ python main_dmd.py \
   --exp_name dmd_debug \
   --teacher_path outputs/qm9_latent2 \
   --train_diffusion \
-  --n_epochs 2 --batch_size 16 --diffusion_steps 100 \
+  --n_epochs 2 --batch_size 16 \
   --n_layers 4 --nf 256 --n_stability_samples 10 \
   --test_epochs 1 --break_train_epoch True \
   --no_wandb --save_model False
