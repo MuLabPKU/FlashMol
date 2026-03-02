@@ -154,8 +154,7 @@ python main_dmd.py \
   --diffusion_noise_precision 1e-5 \
   --diffusion_loss_type l2 \
   --nf 256 \
-  --n_layers 9 \
-  --lr 1e-4 \
+  --n_layers 9  \
   --normalize_factors [1,4,10] \
   --test_epochs 10 \
   --ema_decay 0.9999 \

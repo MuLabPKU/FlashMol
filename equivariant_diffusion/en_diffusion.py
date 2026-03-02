@@ -1255,6 +1255,17 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         xh = xh * node_mask
 
         return xh
+
+    def one_step_sample_latent(self, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
+        if fix_noise:
+            # Noise is broadcasted over the batch axis, useful for visualizations.
+            z = super().sample_combined_position_feature_noise(1, n_nodes, node_mask)
+        else:
+            z = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
+        z_T = z
+        z0 = self.sample_p0_from_pT(z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise) 
+        z0 = z0 * node_mask
+        return z0
     
     def corrupt(self, t, original, n_samples, n_nodes, node_mask, edge_mask, context) :
         t0 = torch.zeros(n_samples, 1, device=original.device)
@@ -1304,7 +1315,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         mu = x_t / alpha_t_given_s - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_t
 
         # Tweedie's formula for the score.
-        s = - (x_t - alpha_t * mu) / sigma_t ** 2
+        s = - (x_t - alpha_t * mu) / ((sigma_t + 1e-8) ** 2)
 
         if z0 is not None:
             # Recover the noise that corrupt() used: z_t = z0 + eps * sigma_t_given_s

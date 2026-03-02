@@ -4,7 +4,7 @@ from equivariant_diffusion.utils import assert_mean_zero_with_mask, remove_mean_
 import numpy as np
 import qm9.visualizer as vis
 from qm9.analyze import analyze_stability_for_molecules
-from qm9.sampling import sample_chain, sample, sample_sweep_conditional
+from qm9.sampling import sample_chain, sample_sweep_conditional
 import utils
 import qm9.utils as qm9utils
 import time
@@ -77,16 +77,19 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # 2. Encode to latent, corrupt, compute scores.
         # 3. DMD loss + GAN generator loss → update G.
         # ================================================================
-        z_fake = G.one_step_sample(bs_data, n_data, node_mask, edge_mask, context)
-        z_fake_e = mu_real.encode(z_fake, node_mask, edge_mask, context)  # [B, N, latent_nf]
+        z_fake_e = G.one_step_sample_latent(bs_data, n_data, node_mask, edge_mask, context)
 
         z_fake_t = mu_real.corrupt(noise_t, z_fake_e, bs_data, n_data, node_mask, edge_mask, context)
 
         with torch.no_grad():
             s_real, _ = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
+        z_fake_e_d = z_fake_e.detach()
+        z_fake_t_d = z_fake_t.detach()
+        x_e_d      = x_e.detach()
+
         # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
-        s_fake, _ = mu_fake.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
+        s_fake, _ = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context)
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
         d_s = (s_fake - s_real).detach()
@@ -109,16 +112,12 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # D is trained to distinguish real from fake mu_fake features.
         # gan_coeff scales L_disc only; no separate mu_fake GAN term.
         # ================================================================
-        z_fake_e_d = z_fake_e.detach()
-        z_fake_t_d = z_fake_t.detach()
-        x_e_d      = x_e.detach()
 
         for _ in range(5):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
-            _, _, L_fake_diffusion = mu_fake.score(
-                noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context,
-                z0=z_fake_e_d)
+            _, _, L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
+                                                   node_mask, edge_mask, context, z_fake_e_d)
             log_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
@@ -202,6 +201,45 @@ def denoise_step(model, z_t, alpha_t, sigma_t, t, node_mask, edge_mask, context)
     return (z_t / alpha_t) - (model.phi(z_t, t, node_mask, edge_mask, context) * (sigma_t / alpha_t))
 
 
+def sample_one_step(args, device, model, dataset_info, prop_dist=None, nodesxsample=torch.tensor([10])):
+    """One-step sampling for DMD-trained models via model.one_step_sample()."""
+    max_n_nodes = dataset_info['max_n_nodes']
+    assert int(torch.max(nodesxsample)) <= max_n_nodes
+    batch_size = len(nodesxsample)
+
+    node_mask = torch.zeros(batch_size, max_n_nodes)
+    for i in range(batch_size):
+        node_mask[i, 0:nodesxsample[i]] = 1
+
+    edge_mask = node_mask.unsqueeze(1) * node_mask.unsqueeze(2)
+    diag_mask = ~torch.eye(edge_mask.size(1), dtype=torch.bool).unsqueeze(0)
+    edge_mask *= diag_mask
+    edge_mask = edge_mask.view(batch_size * max_n_nodes * max_n_nodes, 1).to(device)
+    node_mask = node_mask.unsqueeze(2).to(device)
+
+    if args.context_node_nf > 0:
+        context = prop_dist.sample_batch(nodesxsample)
+        context = context.unsqueeze(1).repeat(1, max_n_nodes, 1).to(device) * node_mask
+    else:
+        context = None
+
+    with torch.no_grad():
+        xh = model.one_step_sample(batch_size, max_n_nodes, node_mask, edge_mask, context)
+
+    # Split data-space xh using VAE dimensions (not latent-space num_classes).
+    n_dims = model.vae.n_dims
+    num_atom_types = model.vae.in_node_nf - int(model.vae.include_charges)
+    x = xh[:, :, :n_dims]
+    one_hot = xh[:, :, n_dims:n_dims + num_atom_types]
+    charges = xh[:, :, n_dims + num_atom_types:]
+
+    assert_correctly_masked(x, node_mask)
+    assert_mean_zero_with_mask(x, node_mask)
+    assert_correctly_masked(one_hot.float(), node_mask)
+
+    return one_hot, charges, x, node_mask
+
+
 def check_mask_correct(variables, node_mask):
     for variable in variables:
         if len(variable) > 0:
@@ -266,9 +304,9 @@ def sample_different_sizes_and_save(model, nodes_dist, args, device, dataset_inf
     batch_size = min(batch_size, n_samples)
     for counter in range(int(n_samples / batch_size)):
         nodesxsample = nodes_dist.sample(batch_size)
-        one_hot, charges, x, node_mask = sample(args, device, model, prop_dist=prop_dist,
-                                                 nodesxsample=nodesxsample,
-                                                 dataset_info=dataset_info)
+        one_hot, charges, x, node_mask = sample_one_step(args, device, model, dataset_info,
+                                                         prop_dist=prop_dist,
+                                                         nodesxsample=nodesxsample)
         print(f"Generated molecule: Positions {x[:-1, :, :]}")
         vis.save_xyz_file(f'outputs/{args.exp_name}/epoch_{epoch}_{batch_id}/',
                           one_hot, charges, x, dataset_info, batch_size * counter, name='molecule')
@@ -282,8 +320,9 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
     molecules = {'one_hot': [], 'x': [], 'node_mask': []}
     for i in range(int(n_samples / batch_size)):
         nodesxsample = nodes_dist.sample(batch_size)
-        one_hot, charges, x, node_mask = sample(args, device, model_sample, dataset_info, prop_dist,
-                                                 nodesxsample=nodesxsample)
+        one_hot, charges, x, node_mask = sample_one_step(args, device, model_sample, dataset_info,
+                                                         prop_dist=prop_dist,
+                                                         nodesxsample=nodesxsample)
         molecules['one_hot'].append(one_hot.detach().cpu())
         molecules['x'].append(x.detach().cpu())
         molecules['node_mask'].append(node_mask.detach().cpu())

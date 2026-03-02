@@ -18,6 +18,7 @@ from os.path import join
 from qm9.sampling import sample
 from qm9.analyze import analyze_stability_for_molecules, analyze_node_distribution
 from qm9.utils import prepare_context, compute_mean_mad
+from equivariant_diffusion.utils import assert_mean_zero_with_mask as _assert_mean_zero
 from qm9 import visualizer as qm9_visualizer
 import qm9.losses as losses
 
@@ -32,16 +33,59 @@ def check_mask_correct(variables, node_mask):
         assert_correctly_masked(variable, node_mask)
 
 
+def sample_one_step(args, device, generative_model, dataset_info,
+                    prop_dist=None, nodesxsample=torch.tensor([10]), context=None):
+    """One-step sampling for DMD-trained models via generative_model.one_step_sample()."""
+    max_n_nodes = dataset_info['max_n_nodes']
+    assert int(torch.max(nodesxsample)) <= max_n_nodes
+    batch_size = len(nodesxsample)
+
+    node_mask = torch.zeros(batch_size, max_n_nodes)
+    for i in range(batch_size):
+        node_mask[i, 0:nodesxsample[i]] = 1
+
+    edge_mask = node_mask.unsqueeze(1) * node_mask.unsqueeze(2)
+    diag_mask = ~torch.eye(edge_mask.size(1), dtype=torch.bool).unsqueeze(0)
+    edge_mask *= diag_mask
+    edge_mask = edge_mask.view(batch_size * max_n_nodes * max_n_nodes, 1).to(device)
+    node_mask = node_mask.unsqueeze(2).to(device)
+
+    if args.context_node_nf > 0:
+        if context is None:
+            context = prop_dist.sample_batch(nodesxsample)
+        context = context.unsqueeze(1).repeat(1, max_n_nodes, 1).to(device) * node_mask
+    else:
+        context = None
+
+    xh = generative_model.one_step_sample(batch_size, max_n_nodes, node_mask, edge_mask, context)
+
+    # Split data-space xh using VAE dimensions (not latent-space num_classes).
+    n_dims = generative_model.vae.n_dims
+    num_atom_types = generative_model.vae.in_node_nf - int(generative_model.vae.include_charges)
+    x = xh[:, :, :n_dims]
+    one_hot = xh[:, :, n_dims:n_dims + num_atom_types]
+    charges = xh[:, :, n_dims + num_atom_types:]
+
+    assert_correctly_masked(x, node_mask)
+    _assert_mean_zero(x, node_mask)
+    assert_correctly_masked(one_hot.float(), node_mask)
+    if args.include_charges:
+        assert_correctly_masked(charges.float(), node_mask)
+
+    return one_hot, charges, x, node_mask
+
+
 def analyze_and_save(args, eval_args, device, generative_model,
                      nodes_dist, prop_dist, dataset_info, n_samples=10,
                      batch_size=10, save_to_xyz=False):
     batch_size = min(batch_size, n_samples)
     assert n_samples % batch_size == 0
     molecules = {'one_hot': [], 'x': [], 'node_mask': []}
+    sample_fn = sample if getattr(eval_args, 'multi_step', False) else sample_one_step
     start_time = time.time()
     for i in range(int(n_samples/batch_size)):
         nodesxsample = nodes_dist.sample(batch_size)
-        one_hot, charges, x, node_mask = sample(
+        one_hot, charges, x, node_mask = sample_fn(
             args, device, generative_model, dataset_info, prop_dist=prop_dist, nodesxsample=nodesxsample)
 
         molecules['one_hot'].append(one_hot.detach().cpu())
@@ -121,6 +165,8 @@ def main():
                         help='Should save samples to xyz files.')
     parser.add_argument('--epoch', type=int, default=-1,
                         help='Choose which epoch to test')
+    parser.add_argument('--one_step', action='store_true',
+                        help='Use one-step sampling (for DMD-trained models)')
 
     eval_args, unparsed_args = parser.parse_known_args()
 
