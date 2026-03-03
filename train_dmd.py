@@ -116,6 +116,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
             optim_fake_d.zero_grad()
             L_fake.backward()
+            torch.nn.utils.clip_grad_norm_(
+                list(mu_fake.parameters()) + list(discriminator.parameters()), 
+                max_norm=1.0
+            )
             optim_fake_d.step()
 
 

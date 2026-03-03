@@ -1276,14 +1276,10 @@ class EnLatentDiffusion(EnVariationalDiffusion):
     def corrupt(self, t, original, n_samples, n_nodes, node_mask, edge_mask, context) :
         t0 = torch.zeros(n_samples, 1, device=original.device)
         gamma_t = self.gamma(t)
-        gamma_0 = self.gamma(t0)
-        sigma2_t_given_0, sigma_t_given_0, alpha_T_given_0 = \
-            self.sigma_and_alpha_t_given_s(gamma_t, gamma_0, original) 
-        sigma_0 = self.sigma(gamma_0, target_tensor=original)
+        alpha_t = self.alpha(gamma_t, target_tensor=original)
         sigma_t = self.sigma(gamma_t, target_tensor=original)
-        d_sigma = torch.sqrt(- sigma_0 ** 2 + sigma_t ** 2)
         noise = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
-        zt = original + noise * d_sigma
+        zt = original * alpha_t + noise * sigma_t
         zt = zt * node_mask
         return zt
 
@@ -1325,7 +1321,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
 
         if z0 is not None:
             # Recover the noise that corrupt() used: z_t = z0 + eps * sigma_t_given_s
-            recovered_eps = (x_t - z0) / (sigma_t_given_s + 1e-8)
+            recovered_eps = (x_t - alpha_t * z0) / (sigma_t + 1e-8)
             diffusion_loss = self.compute_error(eps_t, gamma_t, recovered_eps).mean()
             return s, mu, diffusion_loss
 
