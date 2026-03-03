@@ -165,7 +165,6 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             print(f'Sampling took {time.time() - start:.2f} seconds')
 
             vis.visualize(f"outputs/{args.exp_name}/epoch_{epoch}_{i}", dataset_info=dataset_info, wandb=wandb)
-            vis.visualize_chain(f"outputs/{args.exp_name}/epoch_{epoch}_{i}/chain/", dataset_info, wandb=wandb)
             if len(args.conditioning) > 0:
                 vis.visualize_chain("outputs/%s/epoch_%d/conditional/" % (args.exp_name, epoch),
                                     dataset_info, wandb=wandb, mode='conditional')
