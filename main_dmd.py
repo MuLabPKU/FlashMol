@@ -270,8 +270,6 @@ else:
 
 args.context_node_nf = context_node_nf
 
-N = args.diffusion_steps
-
 # Create Latent Diffusion Model or Autoencoder
 # Initialize teacher as None (will be set if needed)
 teacher = None
