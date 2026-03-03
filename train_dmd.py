@@ -14,8 +14,8 @@ from equivariant_diffusion import utils as diffusion_utils
 
 def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discriminator,
                 ema, device, dtype, property_norms, nodes_dist, gradnorm_queue,
-                dataset_info, prop_dist, optim_G, optim_fake_d, gan_coeff,
-                reg_coeff=0.1):
+                dataset_info, prop_dist, optim_G, optim_fake_d, gan_coeffg, gan_coefff,
+                reg_coeff, step_ratio):
 
     T = mu_real.T
     Tmin = max(1, int(0.2 * T))
@@ -89,36 +89,14 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         z_fake_t_d = z_fake_t.detach()
         x_e_d      = x_e.detach()
 
-        # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
-        s_fake, _ = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context)
-
-        # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
-        d_s = (s_fake - s_real).detach()
-        L_dmd = (d_s * z_fake_e).sum(dim=[1, 2]).mean()
-
-        # Latent scale regularization: penalize z_fake_e variance mismatch with real latents
-        L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
-                 - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
-
-        # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
-        L_gan_G = -discriminator._forward(node_mask, edge_mask).mean()
-
-        L_G = L_dmd + gan_coeff * L_gan_G + reg_coeff * L_reg
-
-        optim_G.zero_grad()
-        L_G.backward()
-        if args.clip_grad:
-            utils.gradient_clipping(G, gradnorm_queue)
-        optim_G.step()
-
         # ================================================================
-        # MU_FAKE + DISCRIMINATOR UPDATE  (5 inner steps per 1 G step)
+        # MU_FAKE + DISCRIMINATOR UPDATE  (step_ratio inner steps per 1 G step)
         # mu_fake is trained to denoise fake samples (diffusion loss).
         # D is trained to distinguish real from fake mu_fake features.
         # gan_coeff scales L_disc only; no separate mu_fake GAN term.
         # ================================================================
 
-        for _ in range(5):
+        for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
             _, _, L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
@@ -134,11 +112,35 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             L_disc = -log_D_real.mean() \
                      - torch.log(1.0 - torch.exp(log_D_fake) + 1e-8).mean()
 
-            L_fake = L_fake_diffusion + gan_coeff * L_disc
+            L_fake = L_fake_diffusion + gan_coefff * L_disc
 
             optim_fake_d.zero_grad()
             L_fake.backward()
             optim_fake_d.step()
+
+
+        # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
+        s_fake, _ = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context)
+
+        # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
+        latent_nf = s_fake.shape[-1]
+        d_s = (s_fake - s_real).detach()
+        L_dmd = (d_s * z_fake_e).sum(dim=[1, 2]).mean() / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
+
+        # Latent scale regularization: penalize z_fake_e variance mismatch with real latents
+        L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
+                 - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
+
+        # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
+        L_gan_G = -discriminator._forward(node_mask, edge_mask).mean()
+
+        L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
+
+        optim_G.zero_grad()
+        L_G.backward()
+        if args.clip_grad:
+            utils.gradient_clipping(G, gradnorm_queue)
+        optim_G.step()
 
         # ================================================================
         # EMA update on G
@@ -154,12 +156,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                   f"L_disc: {L_disc.item():.4f}, L_reg: {L_reg.item():.4f}")
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
-                and not (epoch == 0 and i == 0) and epoch >= 8 and args.train_diffusion:
+                and not (epoch == 0 and i == 0) and args.train_diffusion:
             start = time.time()
             if len(args.conditioning) > 0:
                 save_and_sample_conditional(args, device, G_ema, prop_dist, dataset_info, epoch=epoch)
-            save_and_sample_chain(G_ema, args, device, dataset_info, prop_dist,
-                                  epoch=epoch, batch_id=str(i))
             sample_different_sizes_and_save(G_ema, nodes_dist, args, device, dataset_info,
                                             prop_dist, epoch=epoch)
             print(f'Sampling took {time.time() - start:.2f} seconds')

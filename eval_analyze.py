@@ -81,7 +81,7 @@ def analyze_and_save(args, eval_args, device, generative_model,
     batch_size = min(batch_size, n_samples)
     assert n_samples % batch_size == 0
     molecules = {'one_hot': [], 'x': [], 'node_mask': []}
-    sample_fn = sample if getattr(eval_args, 'multi_step', False) else sample_one_step
+    sample_fn = sample_one_step
     start_time = time.time()
     for i in range(int(n_samples/batch_size)):
         nodesxsample = nodes_dist.sample(batch_size)
@@ -165,8 +165,6 @@ def main():
                         help='Should save samples to xyz files.')
     parser.add_argument('--epoch', type=int, default=-1,
                         help='Choose which epoch to test')
-    parser.add_argument('--one_step', action='store_true',
-                        help='Use one-step sampling (for DMD-trained models)')
 
     eval_args, unparsed_args = parser.parse_known_args()
 
@@ -207,9 +205,9 @@ def main():
     generative_model.to(device)
 
     if epoch_num == -1 :
-        fn = 'generative_model_ema.npy' if args.ema_decay > 0 else f'generative_model.npy'
+        fn = 'G_ema.npy' if args.ema_decay > 0 else f'G.npy'
     else :
-        fn = f'generative_model_ema_{epoch_num}.npy' if args.ema_decay > 0 else f'generative_model_{epoch_num}.npy'
+        fn = f'G_ema_{epoch_num}.npy' if args.ema_decay > 0 else f'G_{epoch_num}.npy'
     flow_state_dict = torch.load(join(eval_args.model_path, fn), map_location=device)
     generative_model.load_state_dict(flow_state_dict)
 

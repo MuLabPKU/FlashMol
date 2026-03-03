@@ -46,8 +46,10 @@ parser.add_argument('--trainable_ae', action='store_true',
                     help='Train first stage AutoEncoder model')
 
 # GAN args
-parser.add_argument('--gan_coeff', type=float, default=0.02)
+parser.add_argument('--gan_coeffg', type=float, default=0)
+parser.add_argument('--gan_coefff', type=float, default=0.02)
 parser.add_argument('--reg_coeff', type=float, default=0)
+parser.add_argument('--step_ratio', type=int, default=5)
 
 # VAE args
 parser.add_argument('--latent_nf', type=int, default=4,
@@ -62,7 +64,6 @@ parser.add_argument('--probabilistic_model', type=str, default='diffusion',
                     help='diffusion')
 
 # Training complexity is O(1) (unaffected), but sampling complexity is O(steps).
-parser.add_argument('--diffusion_steps', type=int, default=500, help='student difusion steps')
 parser.add_argument('--diffusion_noise_schedule', type=str, default='polynomial_2',
                     help='learned, cosine')
 parser.add_argument('--diffusion_noise_precision', type=float, default=1e-5,
@@ -248,7 +249,7 @@ if args.no_wandb:
     mode = 'disabled'
 else:
     mode = 'online' if args.online else 'offline'
-kwargs = {'entity': args.wandb_usr, 'name': args.exp_name, 'project': 'e3_progdistill_diffusion_qm9_new', 'config': args,
+kwargs = {'entity': args.wandb_usr, 'name': args.exp_name, 'project': 'e3_dmd_trial', 'config': args,
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 wandb.save('*.txt')
@@ -302,6 +303,9 @@ if args.train_diffusion:
                 f"Teacher args file not found: {args_file}\n"
                 f"Make sure the teacher checkpoint exists at the specified epoch."
             )
+
+        # Sync diffusion_steps from teacher so saved args.pickle matches model weights
+        args.diffusion_steps = teacher_args.diffusion_steps
 
         # Create teacher with its ORIGINAL diffusion_steps from checkpoint
         teacher, nodes_dist, prop_dist = get_latent_diffusion(teacher_args, device, dataset_info, dataloaders['train'])
@@ -514,7 +518,7 @@ def main():
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
                     optim_G=optim_G, optim_fake_d=optim_fake_d, prop_dist=prop_dist,
-                    gan_coeff=args.gan_coeff, reg_coeff=args.reg_coeff)
+                    gan_coefff=args.gan_coefff, gan_coeffg=args.gan_coeffg, reg_coeff=args.reg_coeff, step_ratio=args.step_ratio)
 
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 
