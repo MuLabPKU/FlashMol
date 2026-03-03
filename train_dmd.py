@@ -156,7 +156,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                   f"L_disc: {L_disc.item():.4f}, L_reg: {L_reg.item():.4f}")
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
-                and not (epoch == 0 and i == 0) and args.train_diffusion:
+                and args.train_diffusion:
             start = time.time()
             if len(args.conditioning) > 0:
                 save_and_sample_conditional(args, device, G_ema, prop_dist, dataset_info, epoch=epoch)
