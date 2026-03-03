@@ -156,7 +156,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                   f"L_disc: {L_disc.item():.4f}, L_reg: {L_reg.item():.4f}")
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
-                and args.train_diffusion:
+                and not (epoch == 0 and i == 0) and args.train_diffusion:
             start = time.time()
             if len(args.conditioning) > 0:
                 save_and_sample_conditional(args, device, G_ema, prop_dist, dataset_info, epoch=epoch)
@@ -166,7 +166,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
             vis.visualize(f"outputs/{args.exp_name}/epoch_{epoch}_{i}", dataset_info=dataset_info, wandb=wandb)
             if len(args.conditioning) > 0:
-                vis.visualize_chain("outputs/%s/epoch_%d/conditional/" % (args.exp_name, epoch),
+                vis.visualize("outputs/%s/epoch_%d/conditional/" % (args.exp_name, epoch),
                                     dataset_info, wandb=wandb, mode='conditional')
 
         if args.break_train_epoch:
