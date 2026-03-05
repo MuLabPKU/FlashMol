@@ -86,10 +86,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         if step_num == 1 :
             z_fake_e = G.one_step_sample_latent(bs_data, n_data, node_mask, edge_mask, context)
         else :
-            z_fake_es = torch.zeros((step_num, bs_data, n_data, latent_nf), device=x.device)
-            z_fake_es = G.few_step_sample_latent(z_fake_es, step_num, bs_data, n_data, node_mask, edge_mask, context)
+            # Select which step to backprop through BEFORE generating,
+            # so only 1 step keeps its computation graph (saves ~(step_num-1)x GPU memory).
             z_t_hat = torch.randint(0, step_num, (1,)).item()
-            z_fake_e = z_fake_es[z_t_hat]
+            z_fake_e = G.few_step_sample_latent(
+                step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
 
         z_fake_t = mu_real.corrupt(noise_t, z_fake_e, bs_data, n_data, node_mask, edge_mask, context)
 

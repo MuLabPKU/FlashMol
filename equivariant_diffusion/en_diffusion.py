@@ -1278,16 +1278,24 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         z0 = z0 * node_mask
         return z0
     
-    def few_step_sample_latent(self, container, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
-        # Schedule of integer timesteps: [T, T-dT, ..., dT] (NOT normalized — sample_p0_from_pt normalizes internally)
+    def few_step_sample_latent(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False, selected_step=-1) :
+        """Multi-step latent generation. If selected_step >= 0, only that step keeps grad (returns single tensor).
+        Otherwise returns a list of detached outputs for all steps."""
         step_schedule = torch.arange(self.T, 0, -(self.T) / step_num)
         z = 0
+        selected_z = None
+        outputs = []
         for i, t in enumerate(step_schedule):
             t = t - 1
             z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
-            container[i] = z
-            z = z.detach()          # detach before feeding to next step (saves memory)
-        return container
+            if i == selected_step:
+                selected_z = z
+            else:
+                outputs.append(z.detach())
+            z = z.detach()
+        if selected_step >= 0:
+            return selected_z
+        return outputs
     
     @torch.no_grad()
     def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
