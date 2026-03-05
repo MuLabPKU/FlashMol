@@ -99,7 +99,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
-            _, _, L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
+            _, L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                                    node_mask, edge_mask, context, z_fake_e_d)
             log_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
 
@@ -124,7 +124,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
 
         # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
-        s_fake, _ = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context)
+        s_fake = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context)
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
         latent_nf = s_fake.shape[-1]

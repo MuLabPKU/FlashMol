@@ -1314,18 +1314,17 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         # Compute mu for p(zs | zt).
         diffusion_utils.assert_mean_zero_with_mask(x_t[:, :, :self.n_dims], node_mask)
         diffusion_utils.assert_mean_zero_with_mask(eps_t[:, :, :self.n_dims], node_mask)
-        mu = x_t / alpha_t_given_s - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_t
 
         # Tweedie's formula for the score.
-        s = - (x_t - alpha_t * mu) / ((sigma_t + 1e-8) ** 2)
+        s = - eps_t / (sigma_t + 1e-8)
 
         if z0 is not None:
             # Recover the noise that corrupt() used: z_t = z0 + eps * sigma_t_given_s
             recovered_eps = (x_t - alpha_t * z0) / (sigma_t + 1e-8)
             diffusion_loss = self.compute_error(eps_t, gamma_t, recovered_eps).mean()
-            return s, mu, diffusion_loss
+            return s, diffusion_loss
 
-        return s, mu
+        return s
 
     # DMD requires grad
     def sample_chain(self, n_samples, n_nodes, node_mask, edge_mask, context, keep_frames=None):
