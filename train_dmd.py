@@ -15,10 +15,13 @@ from equivariant_diffusion import utils as diffusion_utils
 def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discriminator,
                 ema, device, dtype, property_norms, nodes_dist, gradnorm_queue,
                 dataset_info, prop_dist, optim_G, optim_fake_d, gan_coeffg, gan_coefff,
-                reg_coeff, step_ratio):
+                reg_coeff, step_ratio, step_num):
 
     T = mu_real.T
-    Tmin = max(1, int(0.2 * T))
+    if epoch <= 10 :
+        Tmin = max(1, int(0.8 * T))
+    else :
+        Tmin = max(1, int(0.2 * T))
     Tmax = int(0.98 * T)
 
     G_dp.train()
@@ -54,7 +57,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         else:
             context = None
 
-        bs_data, n_data, _ = x.shape
+        bs_data, n_data, num_feat = x.shape
 
         # ================================================================
         # Encode real data once (no grad needed, mu_real is frozen).
@@ -65,6 +68,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                                else charges.unsqueeze(2)], dim=2) if args.include_charges \
                 else torch.cat([x, one_hot], dim=2)
             x_e = mu_real.encode(x_xh, node_mask, edge_mask, context)   # [B, N, latent_nf]
+            # another choice is to use encode_to_latent_space
+        latent_nf = x_e.shape[-1]
 
         # ================================================================
         # Sample timestep t ∈ [Tmin, Tmax] (normalised to [0,1]).
@@ -78,12 +83,18 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # 2. Encode to latent, corrupt, compute scores.
         # 3. DMD loss + GAN generator loss → update G.
         # ================================================================
-        z_fake_e = G.one_step_sample_latent(bs_data, n_data, node_mask, edge_mask, context)
+        if step_num == 1 :
+            z_fake_e = G.one_step_sample_latent(bs_data, n_data, node_mask, edge_mask, context)
+        else :
+            z_fake_es = torch.zeros((step_num, bs_data, n_data, latent_nf), device=x.device)
+            z_fake_es = G.few_step_sample_latent(z_fake_es, step_num, bs_data, n_data, node_mask, edge_mask, context)
+            z_t_hat = torch.randint(0, step_num, (1,)).item()
+            z_fake_e = z_fake_es[z_t_hat]
 
         z_fake_t = mu_real.corrupt(noise_t, z_fake_e, bs_data, n_data, node_mask, edge_mask, context)
 
         with torch.no_grad():
-            s_real, _ = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
+            s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
         z_fake_e_d = z_fake_e.detach()
         z_fake_t_d = z_fake_t.detach()
@@ -232,7 +243,10 @@ def sample_one_step(args, device, model, dataset_info, prop_dist=None, nodesxsam
         context = None
 
     with torch.no_grad():
-        xh = model.one_step_sample(batch_size, max_n_nodes, node_mask, edge_mask, context)
+        if args.step_num == 1 :
+            xh = model.one_step_sample(batch_size, max_n_nodes, node_mask, edge_mask, context)
+        else :
+            xh = model.few_step_sample(args.step_num, batch_size, max_n_nodes, node_mask, edge_mask, context)
 
     # Split data-space xh using VAE dimensions (not latent-space num_classes).
     n_dims = model.vae.n_dims
@@ -338,9 +352,9 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
     molecules = {key: torch.cat(molecules[key], dim=0) for key in molecules}
     validity_dict, rdkit_tuple = analyze_stability_for_molecules(molecules, dataset_info)
 
-    wandb.log(validity_dict)
+    wandb.log(validity_dict, commit=False)
     if rdkit_tuple is not None:
-        wandb.log({'Validity': rdkit_tuple[0][0], 'Uniqueness': rdkit_tuple[0][1], 'Novelty': rdkit_tuple[0][2]})
+        wandb.log({'Validity': rdkit_tuple[0][0], 'Uniqueness': rdkit_tuple[0][1], 'Novelty': rdkit_tuple[0][2]}, commit=False)
     return validity_dict
 
 

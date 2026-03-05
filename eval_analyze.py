@@ -57,7 +57,11 @@ def sample_one_step(args, device, generative_model, dataset_info,
     else:
         context = None
 
-    xh = generative_model.one_step_sample(batch_size, max_n_nodes, node_mask, edge_mask, context)
+    step_num = getattr(args, 'step_num', 1)
+    if step_num == 1:
+        xh = generative_model.one_step_sample(batch_size, max_n_nodes, node_mask, edge_mask, context)
+    else:
+        xh = generative_model.few_step_sample(step_num, batch_size, max_n_nodes, node_mask, edge_mask, context)
 
     # Split data-space xh using VAE dimensions (not latent-space num_classes).
     n_dims = generative_model.vae.n_dims

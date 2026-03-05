@@ -1222,23 +1222,26 @@ class EnLatentDiffusion(EnVariationalDiffusion):
 
     # One step generation method for student model G (with grad!)
 
-    def sample_p0_from_pT(self, z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
-        T = torch.ones((n_samples, 1), device=z_T.device)   # normalized max time = 1.0
-        t_minus_one = self.T - 1
-        t_minus_one = t_minus_one / self.T
-        s = torch.full_like(T, t_minus_one, device=z_T.device)
-        gamma_T = self.gamma(T)
+    def sample_p0_from_pt(self, z_T, n_samples, n_nodes, node_mask, edge_mask, context, scalar_T, z_pre=0, fix_noise=False) :
+        t = torch.full((n_samples, 1), scalar_T / self.T, device=z_T.device)   # normalized max time = 1.0
+        s = torch.zeros_like(t)
+        gamma_t = self.gamma(t)
         gamma_s = self.gamma(s)
-        eps_T = self.phi(z_T, T, node_mask, edge_mask, context)
+        alpha_t = self.alpha(gamma_t, z_T)
+        sigma_t = self.sigma(gamma_t, z_T)
 
-        sigma2_T_given_s, sigma_T_given_s, alpha_T_given_s = \
-            self.sigma_and_alpha_t_given_s(gamma_T, gamma_s, z_T) 
+        z_T = z_T * sigma_t + z_pre * alpha_t
+
+        eps_T = self.phi(z_T, t, node_mask, edge_mask, context)
+
+        sigma2_t_given_s, sigma_t_given_s, alpha_t_given_s = \
+            self.sigma_and_alpha_t_given_s(gamma_t, gamma_s, z_T) 
         sigma_s = self.sigma(gamma_s, target_tensor=z_T)
-        sigma_t = self.sigma(gamma_T, target_tensor=z_T)
+        sigma_t = self.sigma(gamma_t, target_tensor=z_T)
 
         diffusion_utils.assert_mean_zero_with_mask(z_T[:, :, :self.n_dims], node_mask)
         diffusion_utils.assert_mean_zero_with_mask(eps_T[:, :, :self.n_dims], node_mask)
-        mu = z_T / alpha_T_given_s - (sigma2_T_given_s / alpha_T_given_s / sigma_t) * eps_T
+        mu = z_T / alpha_t_given_s - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_T
         mu = mu * node_mask 
         return mu
     
@@ -1249,7 +1252,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         else:
             z = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
         z_T = z
-        z0 = self.sample_p0_from_pT(z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise)
+        z0 = self.sample_p0_from_pt(z_T, n_samples, n_nodes, node_mask, edge_mask, context, self.T, z_pre=0, fix_noise=fix_noise)
         # Sample in latent space at t=0 (phi refinement + σ₀ noise) via the override.
         # The override returns latent-space x and h (h['integer']=[B,N,latent_nf], h['categorical']=zeros(0)).
         x_latent, h_latent = self.sample_p_xh_given_z0(z0, node_mask, edge_mask, context, fix_noise)
@@ -1262,16 +1265,47 @@ class EnLatentDiffusion(EnVariationalDiffusion):
 
         return xh
 
-    def one_step_sample_latent(self, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
+    def one_step_sample_latent(self, n_samples, n_nodes, node_mask, edge_mask, context, scalar_t=-1, z_pre=0, fix_noise=False) :
         if fix_noise:
             # Noise is broadcasted over the batch axis, useful for visualizations.
             z = super().sample_combined_position_feature_noise(1, n_nodes, node_mask)
         else:
             z = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
         z_T = z
-        z0 = self.sample_p0_from_pT(z_T, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise) 
+        if scalar_t == -1 :
+            scalar_t = self.T
+        z0 = self.sample_p0_from_pt(z_T, n_samples, n_nodes, node_mask, edge_mask, context, scalar_t, z_pre, fix_noise) 
         z0 = z0 * node_mask
         return z0
+    
+    def few_step_sample_latent(self, container, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
+        # Schedule of integer timesteps: [T, T-dT, ..., dT] (NOT normalized — sample_p0_from_pt normalizes internally)
+        step_schedule = torch.arange(self.T, 0, -(self.T) / step_num)
+        z = 0
+        for i, t in enumerate(step_schedule):
+            t = t - 1
+            z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
+            container[i] = z
+            z = z.detach()          # detach before feeding to next step (saves memory)
+        return container
+    
+    @torch.no_grad()
+    def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
+        step_schedule = torch.arange(self.T, 0, - (self.T) / step_num)
+        z = 0
+        for t in step_schedule:
+            t = t - 1
+            z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
+        
+        x_latent, h_latent = self.sample_p_xh_given_z0(z, node_mask, edge_mask, context, fix_noise)
+        z0_sampled = torch.cat([x_latent, h_latent['integer']], dim=2)  # [B, N, 3+latent_nf]
+        # Decode sampled latent to original data space via VAE decoder.
+        x, h = self.vae.decode(z0_sampled, node_mask, edge_mask, context)
+        xh = torch.cat([x, h['categorical'].float(), h['integer'].float()], dim=2)
+
+        xh = xh * node_mask
+        return xh
+
     
     def corrupt(self, t, original, n_samples, n_nodes, node_mask, edge_mask, context) :
         t0 = torch.zeros(n_samples, 1, device=original.device)

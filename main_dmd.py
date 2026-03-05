@@ -53,6 +53,7 @@ parser.add_argument('--gan_coeffg', type=float, default=0)
 parser.add_argument('--gan_coefff', type=float, default=0.02)
 parser.add_argument('--reg_coeff', type=float, default=0)
 parser.add_argument('--step_ratio', type=int, default=5)
+parser.add_argument('--step_num', type=int, default=10)
 
 # VAE args
 parser.add_argument('--latent_nf', type=int, default=4,
@@ -535,13 +536,16 @@ def main():
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
                     optim_G=optim_G, optim_fake_d=optim_fake_d, prop_dist=prop_dist,
-                    gan_coefff=args.gan_coefff, gan_coeffg=args.gan_coeffg, reg_coeff=args.reg_coeff, step_ratio=args.step_ratio)
+                    gan_coefff=args.gan_coefff, gan_coeffg=args.gan_coeffg, reg_coeff=args.reg_coeff, step_ratio=args.step_ratio, step_num=args.step_num)
 
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 
         if epoch % args.test_epochs == 0:
+            # Collect all test-epoch metrics into a single dict, then log once.
+            epoch_metrics = {}
+
             if isinstance(G, en_diffusion.EnVariationalDiffusion):
-                wandb.log(G.log_info(), commit=True)
+                epoch_metrics.update(G.log_info())
 
             if not args.break_train_epoch and args.train_diffusion:
                 analyze_and_save(args=args, epoch=epoch, model_sample=G_ema,
@@ -574,9 +578,12 @@ def main():
 
             print('Val loss: %.4f \t Test loss:  %.4f' % (nll_val, nll_test))
             print('Best val loss: %.4f \t Best test loss:  %.4f' % (best_nll_val, best_nll_test))
-            wandb.log({"Val loss": nll_val}, commit=True)
-            wandb.log({"Test loss": nll_test}, commit=True)
-            wandb.log({"Best cross-validated test loss": best_nll_test}, commit=True)
+            epoch_metrics.update({
+                "Val loss": nll_val,
+                "Test loss": nll_test,
+                "Best cross-validated test loss": best_nll_test,
+            })
+            wandb.log(epoch_metrics, commit=True)
 
 
 if __name__ == "__main__":
