@@ -36,6 +36,9 @@ parser.add_argument('--teacher_path', type=str, default='outputs/qm9_latent2',
                     help='Path to teacher model')
 parser.add_argument('--teacher_epoch', type=int, default=None,
                     help='Specific epoch to load teacher from (default: load best model)')
+parser.add_argument('--student_path', type=str, default=None,
+                    help='Path to a pre-trained student checkpoint to initialize G/G_ema from. '
+                         'Ignored when --resume is set.')
 
 # Latent Diffusion args
 parser.add_argument('--train_diffusion', action='store_true', 
@@ -472,6 +475,22 @@ def main():
             print("WARNING: optim_fake_d.npy not found, starting with fresh optimizer state")
 
         print(f"Successfully resumed from epoch {args.start_epoch}")
+
+    # Load G (and G_ema) from a pre-trained student checkpoint.
+    # Only applies when NOT resuming — resume already loads G directly.
+    if args.student_path is not None and args.resume is None:
+        G_ema_path = join(args.student_path, 'G_ema.npy')
+        G_path     = join(args.student_path, 'G.npy')
+        try:
+            G.load_state_dict(torch.load(G_ema_path, map_location=device))
+            print(f"Loaded student G from: {G_ema_path}")
+        except FileNotFoundError:
+            try:
+                G.load_state_dict(torch.load(G_path, map_location=device))
+                print(f"Loaded student G from: {G_path}")
+            except FileNotFoundError:
+                print(f"WARNING: No G checkpoint found at {args.student_path}, "
+                      f"keeping teacher initialization for G.")
 
     # Initialize dataparallel if enabled and possible.
     if args.dp and torch.cuda.device_count() > 1:
