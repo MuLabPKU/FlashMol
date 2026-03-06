@@ -114,6 +114,9 @@ class EGNN_dynamics_QM9(nn.Module):
             return vel
         else:
             h_final = h_final.view(bs, n_nodes, -1)
+            if torch.any(torch.isnan(h_final)):
+                print('Warning: detected nan in h_final, resetting to zero.')
+                h_final = torch.zeros_like(h_final)
             return torch.cat([vel, h_final], dim=2)
 
     def get_adj_matrix(self, n_nodes, batch_size, device):
@@ -385,6 +388,10 @@ class EGNN_decoder_QM9(nn.Module):
         if node_mask is not None:
             h_final = h_final * node_mask
         h_final = h_final.view(bs, n_nodes, -1)
+
+        if torch.any(torch.isnan(h_final)):
+            print('Warning: detected nan in h_final, resetting to zero.')
+            h_final = torch.zeros_like(h_final)
 
         return vel, h_final
     

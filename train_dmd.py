@@ -113,6 +113,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
             _, L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                                    node_mask, edge_mask, context, z_fake_e_d)
+            L_fake_diffusion = L_fake_diffusion.clamp(max=100.0)
             log_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
@@ -126,10 +127,14 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
             L_fake = L_fake_diffusion + gan_coefff * L_disc
 
+            if torch.isnan(L_fake) or torch.isinf(L_fake):
+                print(f'Warning: L_fake is {L_fake.item()}, skipping mu_fake update at iter {i}.')
+                continue
+
             optim_fake_d.zero_grad()
             L_fake.backward()
             torch.nn.utils.clip_grad_norm_(
-                list(mu_fake.parameters()) + list(discriminator.parameters()), 
+                list(mu_fake.parameters()) + list(discriminator.parameters()),
                 max_norm=1.0
             )
             optim_fake_d.step()
@@ -152,11 +157,14 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
 
-        optim_G.zero_grad()
-        L_G.backward()
-        if args.clip_grad:
-            utils.gradient_clipping(G, gradnorm_queue)
-        optim_G.step()
+        if torch.isnan(L_G) or torch.isinf(L_G):
+            print(f'Warning: L_G is {L_G.item()}, skipping G update at iter {i}.')
+        else:
+            optim_G.zero_grad()
+            L_G.backward()
+            if args.clip_grad:
+                utils.gradient_clipping(G, gradnorm_queue)
+            optim_G.step()
 
         # ================================================================
         # EMA update on G
@@ -169,7 +177,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         if i % args.n_report_steps == 0:
             print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
-                  f"L_disc: {L_disc.item():.4f}, L_reg: {L_reg.item():.4f}")
+                  f"L_gan_G: {L_gan_G.item():.4f}, L_reg: {L_reg.item():.4f}, "
+                  f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, L_disc: {L_disc.item():.4f}")
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
                 and not (epoch == 0 and i == 0) and args.train_diffusion:
