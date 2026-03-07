@@ -179,6 +179,7 @@ if args.resume is not None:
     normalization_factor = args.normalization_factor
     aggregation_method = args.aggregation_method
     total_epoch = args.n_epochs
+    test_epochs = args.test_epochs
     coeffg = args.gan_coeffg
     coefff = args.gan_coefff
 
@@ -206,6 +207,7 @@ if args.resume is not None:
     args.start_epoch = start_epoch
     args.wandb_usr = wandb_usr
     args.n_epochs = total_epoch
+    args.test_epochs = test_epochs
     args.gan_coefff = coefff
     args.gan_coeffg = coeffg
 
