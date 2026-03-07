@@ -1284,18 +1284,14 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         step_schedule = torch.arange(self.T, 0, -(self.T) / step_num)
         z = 0
         selected_z = None
-        outputs = []
         for i, t in enumerate(step_schedule):
             t = t - 1
             z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
             if i == selected_step:
                 selected_z = z
-            else:
-                outputs.append(z.detach())
             z = z.detach()
         if selected_step >= 0:
             return selected_z
-        return outputs
     
     @torch.no_grad()
     def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
