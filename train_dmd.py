@@ -24,6 +24,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         Tmin = max(1, int(0.2 * T))
     Tmax = int(0.98 * T)
 
+    if epoch <= 5:
+        gan_coefff = 0
+        gan_coeffg = 0
+
     G_dp.train()
     G.train()
     mu_fake.train()
@@ -88,14 +92,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         else :
             # Select which step to backprop through BEFORE generating,
             # so only 1 step keeps its computation graph (saves ~(step_num-1)x GPU memory).
-            z_t_hat = torch.randint(0, step_num, (1,)).item()
+            z_t_hat = torch.randint(step_num // 2, step_num, (1,)).item()
             z_fake_e = G.few_step_sample_latent(
                 step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
 
         z_fake_t = mu_real.corrupt(noise_t, z_fake_e, bs_data, n_data, node_mask, edge_mask, context)
-
-        with torch.no_grad():
-            s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
         z_fake_e_d = z_fake_e.detach()
         z_fake_t_d = z_fake_t.detach()
@@ -111,14 +112,15 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
-            _, L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
+            L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                                    node_mask, edge_mask, context, z_fake_e_d)
             L_fake_diffusion = L_fake_diffusion.clamp(max=100.0)
             log_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
             x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
-            mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
+            with torch.no_grad() : # To save memory, mu_fake is not trained with L_disc loss
+                mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
             log_D_real = discriminator._forward(node_mask, edge_mask)     # log D(real) [B]
 
             # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
@@ -140,6 +142,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             optim_fake_d.step()
 
 
+        with torch.no_grad():
+            s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
         # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
         s_fake = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context)
 
@@ -157,8 +161,21 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
 
+        if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
+            print(f"z_fake_e stats: min={z_fake_e.min():.2f}, max={z_fake_e.max():.2f}")
+            print(f"z_fake_e coord range: {z_fake_e[:,:,:3].abs().max():.2f}")
+            # check for collapsed atoms
+            x_coords = z_fake_e[:, :, :3]  # [B, N, 3]
+            dists = torch.cdist(x_coords, x_coords)  # [B, N, N]
+            dists = dists + torch.eye(dists.shape[1], device=dists.device) * 1e6  # mask diagonal
+            min_dist = dists.min()
+            print(f"Min pairwise distance: {min_dist:.6f}")
+
         if torch.isnan(L_G) or torch.isinf(L_G):
             print(f'Warning: L_G is {L_G.item()}, skipping G update at iter {i}.')
+        elif any(torch.isnan(p.grad).any() for p in mu_fake.dynamics.parameters() if p.grad is not None):
+            print(f"NaN grad detected at iter {i}, skipping mu_fake update")
+            continue  # skip this inner step
         else:
             optim_G.zero_grad()
             L_G.backward()

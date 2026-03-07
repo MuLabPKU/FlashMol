@@ -71,6 +71,6 @@ class MolecularDiscriminator(nn.Module):
         """Register a forward hook on mu_fake.egnn.embedding_out.
         Captures input[0] (pre-projection, [B*N, hidden_nf]) into self.mu_fake_out."""
         def _hook(_module, input, _output):
-            self.mu_fake_out = input[0]   # [B*N, hidden_nf] — retains grad
+            self.mu_fake_out = input[0].detach()   # [B*N, hidden_nf] — retains grad
 
         mu_fake.dynamics.egnn.embedding_out.register_forward_hook(_hook)

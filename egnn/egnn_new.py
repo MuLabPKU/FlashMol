@@ -255,7 +255,8 @@ def coord2diff(x, edge_index, norm_constant=1):
     row, col = edge_index
     coord_diff = x[row] - x[col]
     radial = torch.sum((coord_diff) ** 2, 1).unsqueeze(1)
-    norm = torch.sqrt(radial + 1e-8)
+    radial = radial.clamp(min=1e-4)
+    norm = torch.sqrt(radial)
     coord_diff = coord_diff/(norm + norm_constant)
     return radial, coord_diff
 

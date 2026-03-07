@@ -1242,6 +1242,12 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         diffusion_utils.assert_mean_zero_with_mask(z_T[:, :, :self.n_dims], node_mask)
         diffusion_utils.assert_mean_zero_with_mask(eps_T[:, :, :self.n_dims], node_mask)
         mu = z_T / alpha_t_given_s - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_T
+
+        mu = mu.clamp(-15, 15)
+        mu = diffusion_utils.remove_mean_with_mask(mu, node_mask)
+
+        diffusion_utils.assert_mean_zero_with_mask(mu, node_mask)
+
         mu = mu * node_mask 
         return mu
     
@@ -1353,14 +1359,15 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         diffusion_utils.assert_mean_zero_with_mask(x_t[:, :, :self.n_dims], node_mask)
         diffusion_utils.assert_mean_zero_with_mask(eps_t[:, :, :self.n_dims], node_mask)
 
-        # Tweedie's formula for the score.
-        s = - eps_t / (sigma_t + 1e-8)
 
         if z0 is not None:
             # Recover the noise that corrupt() used: z_t = z0 + eps * sigma_t_given_s
             recovered_eps = (x_t - alpha_t * z0) / (sigma_t + 1e-8)
             diffusion_loss = self.compute_error(eps_t, gamma_t, recovered_eps).mean()
-            return s, diffusion_loss
+            return diffusion_loss
+
+        # Tweedie's formula for the score.
+        s = - eps_t / (sigma_t + 1e-8)
 
         return s
 
