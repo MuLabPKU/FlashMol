@@ -163,7 +163,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                  - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
 
         # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
-        logit_fake = -discriminator._forward(node_mask, edge_mask).mean()
+        logit_fake = discriminator._forward(node_mask, edge_mask).mean()
         L_gan_G = F.softplus(-logit_fake).mean()
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
