@@ -19,6 +19,7 @@ class MolecularDiscriminator(nn.Module):
                  normalization_factor=100, aggregation_method='sum'):
         super().__init__()
         self.mu_fake_out = None          # instance variable — not shared across instances
+        self.detach_hook = True          # True → detach in mu_fake loop; False → keep grad for G loop
         self.n_dims = n_dims
         self.in_node_nf = in_node_nf
         self.n_layers = n_layers
@@ -32,8 +33,7 @@ class MolecularDiscriminator(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(in_node_nf, in_node_nf),
             act_fn,
-            nn.Linear(in_node_nf, 1),
-            nn.Sigmoid())
+            nn.Linear(in_node_nf, 1))
 
         self.to(device)
 
@@ -64,13 +64,15 @@ class MolecularDiscriminator(nn.Module):
 
         logits = self.mlp(h)                                     # [B, 1, 1]
         logits = logits.squeeze(-1).squeeze(-1)                  # [B]
-        logits = torch.log(logits)
         return logits
 
     def attach_to(self, mu_fake: EnVariationalDiffusion):
         """Register a forward hook on mu_fake.egnn.embedding_out.
         Captures input[0] (pre-projection, [B*N, hidden_nf]) into self.mu_fake_out."""
         def _hook(_module, input, _output):
-            self.mu_fake_out = input[0].detach()   # [B*N, hidden_nf] — retains grad
+            if self.detach_hook:
+                self.mu_fake_out = input[0].detach()
+            else:
+                self.mu_fake_out = input[0]
 
         mu_fake.dynamics.egnn.embedding_out.register_forward_hook(_hook)

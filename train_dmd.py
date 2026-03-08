@@ -9,6 +9,7 @@ import utils
 import qm9.utils as qm9utils
 import time
 import torch
+import torch.nn.functional as F
 from equivariant_diffusion import utils as diffusion_utils
 
 
@@ -26,6 +27,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
     if epoch <= 5:
         gan_coefff = 0
+        gan_coeffg = 0
+    elif epoch > 5 and epoch <= 10 :
         gan_coeffg = 0
 
     G_dp.train()
@@ -109,23 +112,24 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # gan_coeff scales L_disc only; no separate mu_fake GAN term.
         # ================================================================
 
+        discriminator.detach_hook = True   # detach hook features during mu_fake/D update
         for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
             L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                                    node_mask, edge_mask, context, z_fake_e_d)
-            L_fake_diffusion = L_fake_diffusion.clamp(max=100.0)
-            log_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
+            L_fake_diffusion = soft_clamp(L_fake_diffusion)
+            logit_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
             x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
             with torch.no_grad() : # To save memory, mu_fake is not trained with L_disc loss
                 mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
-            log_D_real = discriminator._forward(node_mask, edge_mask)     # log D(real) [B]
+            logit_D_real = discriminator._forward(node_mask, edge_mask)     # log D(real) [B]
 
             # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
-            L_disc = -log_D_real.mean() \
-                     - torch.log(1.0 - torch.exp(log_D_fake) + 1e-8).mean()
+            L_disc = F.softplus(-logit_D_real).mean() \
+                    + F.softplus(logit_D_fake).mean()
 
             L_fake = L_fake_diffusion + gan_coefff * L_disc
 
@@ -145,7 +149,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         with torch.no_grad():
             s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
         # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
-        s_fake = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data, node_mask, edge_mask, context)
+        # Keep hook features on graph so L_gan_G gradient flows back to G.
+        discriminator.detach_hook = False
+        s_fake = mu_fake.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
         latent_nf = s_fake.shape[-1]
@@ -157,7 +163,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                  - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
 
         # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
-        L_gan_G = -discriminator._forward(node_mask, edge_mask).mean()
+        logit_fake = -discriminator._forward(node_mask, edge_mask).mean()
+        L_gan_G = F.softplus(-logit_fake).mean()
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
 
@@ -213,7 +220,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         if args.break_train_epoch:
             break
-    wandb.log({"Train Epoch Loss": np.mean(loss_epoch) if loss_epoch else float('nan')}, commit=False)
+    wandb.log({"Train Epoch Loss": np.mean(loss_epoch) if loss_epoch else float('nan')}, commit=True) # record the loss for every epoch
 
 
 def encode_to_latent_space(model, x, h, node_mask, edge_mask, context):
@@ -391,3 +398,6 @@ def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, ep
         'outputs/%s/epoch_%d/conditional/' % (args.exp_name, epoch),
         one_hot, charges, x, dataset_info, id_from, name='conditional', node_mask=node_mask)
     return one_hot, charges, x
+
+def soft_clamp(x, limit=15.0, temperature=1.0) :
+    return limit * torch.tanh(x / (limit * temperature))

@@ -1243,7 +1243,11 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         diffusion_utils.assert_mean_zero_with_mask(eps_T[:, :, :self.n_dims], node_mask)
         mu = z_T / alpha_t_given_s - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_T
 
-        mu = mu.clamp(-15, 15)
+        mu_norm = mu.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+        max_norm = 15.0 * math.sqrt(mu.shape[-1])  # scale limit by dimension
+        scale = torch.where(mu_norm > max_norm, max_norm / mu_norm, torch.ones_like(mu_norm))
+        mu = mu * scale
+
         mu = diffusion_utils.remove_mean_with_mask(mu, node_mask)
 
         diffusion_utils.assert_mean_zero_with_mask(mu, node_mask)
