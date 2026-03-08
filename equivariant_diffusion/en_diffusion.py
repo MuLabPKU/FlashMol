@@ -1248,9 +1248,9 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         scale = torch.where(mu_norm > max_norm, max_norm / mu_norm, torch.ones_like(mu_norm))
         mu = mu * scale
 
-        mu[:, :, self.n_dims] = diffusion_utils.remove_mean_with_mask(mu[:, :, self.n_dims], node_mask)
+        mu[:, :, :self.n_dims] = diffusion_utils.remove_mean_with_mask(mu[:, :, :self.n_dims], node_mask)
 
-        diffusion_utils.assert_mean_zero_with_mask(mu[:, :, self.n_dims], node_mask)
+        diffusion_utils.assert_mean_zero_with_mask(mu[:, :, :self.n_dims], node_mask)
 
         mu = mu * node_mask 
         return mu
