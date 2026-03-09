@@ -3,7 +3,7 @@ python main_dmd.py \
   --exp_name dmd_qm9_trial_3 \
   --teacher_path outputs/qm9_latent2 \
   --resume outputs/dmd_qm9_trail_difflr_0 \
-  --start_epoch outputs
+  --start_epoch 5 \
   --train_diffusion \
   --step_num 10 \
   --n_epochs 20 \
@@ -23,4 +23,7 @@ python main_dmd.py \
   --step_ratio 5 \
   --reg_coeff 0.0 \
   --G_lr 2e-8 \
-  --mu_fake_lr 8e-8 
+  --mu_fake_lr 8e-8 \
+  --disc_lr 8e-8 \
+  --tmin_liftpos 5 \
+  --step_num_div

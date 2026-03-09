@@ -19,7 +19,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                 reg_coeff, step_ratio, step_num):
 
     T = mu_real.T
-    if epoch <= 10 :
+    if epoch <= args.tmin_liftpos :
         Tmin = max(1, int(0.8 * T))
     else :
         Tmin = max(1, int(0.2 * T))
@@ -92,10 +92,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         else :
             # Select which step to backprop through BEFORE generating,
             # so only 1 step keeps its computation graph (saves ~(step_num-1)x GPU memory).
-            if epoch <= 10 :
-                z_t_hat = torch.randint(step_num // 2, step_num, (1,)).item()
+            if epoch <= args.step_num_liftpos :
+                z_t_hat = torch.randint(step_num // args.step_num_div_large, step_num, (1,)).item()
             else :
-                z_t_hat = torch.randint(step_num // 4, step_num, (1,)).item() 
+                z_t_hat = torch.randint(step_num // args.step_num_div_small, step_num, (1,)).item() 
             z_fake_e = G.few_step_sample_latent(
                 step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
 
