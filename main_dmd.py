@@ -79,6 +79,7 @@ parser.add_argument('--n_epochs', type=int, default=200)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--G_lr', type=float, default=2e-4)
 parser.add_argument('--mu_fake_lr', type=float, default=2e-4)
+parser.add_argument('--disc_lr', type=float, default=2e-4)
 parser.add_argument('--brute_force', type=eval, default=False,
                     help='True | False')
 parser.add_argument('--actnorm', type=eval, default=True,
@@ -375,9 +376,8 @@ G = G.to(device)
 mu_fake = mu_fake.to(device)
 
 optim_G = torch.optim.AdamW(G.dynamics.parameters(), lr=args.G_lr, amsgrad=True, weight_decay=1e-12)
-optim_fake_d = torch.optim.AdamW(
-    list(mu_fake.dynamics.parameters()) + list(discriminator.parameters()),
-    lr=args.mu_fake_lr, amsgrad=True, weight_decay=1e-12)
+optim_fake = torch.optim.AdamW(mu_fake.dynamics.parameters(), lr=args.mu_fake_lr, amsgrad=True, weight_decay=1e-12)
+optim_d = torch.optim.AdamW(discriminator.parameters(), lr=args.disc_lr, amsgrad=True, weight_decay=1e-12)
 
 # print(model)
 
@@ -423,7 +423,7 @@ def compute_loss_and_nll(args, teacher_model, student_model, nodes_dist, x, h, n
     return nll, reg_term, mean_abs_z
 
 
-def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator, optim_G, optim_fake_d, suffix=''):
+def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator, optim_G, optim_fake, optim_d, suffix=''):
     """Save all DMD model states. suffix='' for best, suffix='_N' for periodic."""
     out = 'outputs/%s' % args.exp_name
     args.current_epoch = epoch + 1
@@ -431,7 +431,8 @@ def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator, optim_G, 
     utils.save_model(mu_fake,  f'{out}/mu_fake{suffix}.npy')
     utils.save_model(discriminator,     f'{out}/discriminator{suffix}.npy')
     utils.save_model(optim_G,           f'{out}/optim_G{suffix}.npy')
-    utils.save_model(optim_fake_d,      f'{out}/optim_fake_d{suffix}.npy')
+    utils.save_model(optim_fake,        f'{out}/optim_fake{suffix}.npy')
+    utils.save_model(optim_d,           f'{out}/optim_d{suffix}.npy')
     if G_ema is not None:
         utils.save_model(G_ema,         f'{out}/G_ema{suffix}.npy')
     with open(f'{out}/args{suffix}.pickle', 'wb') as f:
@@ -476,10 +477,16 @@ def main():
             print("WARNING: optim_G.npy not found, starting with fresh optimizer state")
 
         try:
-            optim_fake_d.load_state_dict(torch.load(join(args.resume, 'optim_fake_d.npy'), map_location=device))
-            print("Loaded optim_fake_d state from checkpoint")
+            optim_fake.load_state_dict(torch.load(join(args.resume, 'optim_fake.npy'), map_location=device))
+            print("Loaded optim_fake state from checkpoint")
         except FileNotFoundError:
-            print("WARNING: optim_fake_d.npy not found, starting with fresh optimizer state")
+            print("WARNING: optim_fake.npy not found, starting with fresh optimizer state")
+
+        try:
+            optim_d.load_state_dict(torch.load(join(args.resume, 'optim_d.npy'), map_location=device))
+            print("Loaded optim_d state from checkpoint")
+        except FileNotFoundError:
+            print("WARNING: optim_d.npy not found, starting with fresh optimizer state")
 
         print(f"Successfully resumed from epoch {args.start_epoch}")
 
@@ -541,7 +548,7 @@ def main():
                     ema=ema, device=device, dtype=dtype,
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
-                    optim_G=optim_G, optim_fake_d=optim_fake_d, prop_dist=prop_dist,
+                    optim_G=optim_G, optim_fake=optim_fake, optim_d=optim_d, prop_dist=prop_dist,
                     gan_coefff=args.gan_coefff, gan_coeffg=args.gan_coeffg, reg_coeff=args.reg_coeff, step_ratio=args.step_ratio, step_num=args.step_num)
 
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
@@ -574,12 +581,12 @@ def main():
                 if args.save_model:
                     # Best checkpoint — no epoch suffix
                     save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake,
-                                        discriminator, optim_G, optim_fake_d, suffix='')
+                                        discriminator, optim_G, optim_fake, optim_d, suffix='')
 
             # Periodic checkpoint — epoch-numbered
             if args.save_model:
                 save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake,
-                                    discriminator, optim_G, optim_fake_d, suffix=f'_{epoch}')
+                                    discriminator, optim_G, optim_fake, optim_d, suffix=f'_{epoch}')
                 print(f'Saved periodic checkpoint for epoch {epoch}')
 
             print('Val loss: %.4f \t Test loss:  %.4f' % (nll_val, nll_test))
