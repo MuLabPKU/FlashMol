@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=2
 python main_dmd.py \
   --exp_name dmd_qm9_trial_difflr_1 \
   --teacher_path outputs/qm9_latent2 \
@@ -6,7 +6,7 @@ python main_dmd.py \
   --start_epoch 20 \
   --train_diffusion \
   --step_num 20 \
-  --n_epochs 51 \
+  --n_epochs 36 \
   --batch_size 64 \
   --n_stability_samples 5000 \
   --diffusion_noise_schedule polynomial_2 \
@@ -26,7 +26,7 @@ python main_dmd.py \
   --mu_fake_lr 8e-8 
   
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=2
 python main_dmd.py \
   --exp_name dmd_qm9_trial_difflr_2 \
   --teacher_path outputs/qm9_latent2 \
@@ -34,7 +34,7 @@ python main_dmd.py \
   --start_epoch 20 \
   --train_diffusion \
   --step_num 20 \
-  --n_epochs 51 \
+  --n_epochs 36 \
   --batch_size 64 \
   --n_stability_samples 5000 \
   --diffusion_noise_schedule polynomial_2 \
@@ -55,7 +55,7 @@ python main_dmd.py \
   --disc_lr 8e-6
 
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=2
 python main_dmd.py \
   --exp_name dmd_qm9_trial_difflr_reproduction0 \
   --teacher_path outputs/qm9_latent2 \
@@ -63,7 +63,7 @@ python main_dmd.py \
   --start_epoch 20 \
   --train_diffusion \
   --step_num 20 \
-  --n_epochs 51 \
+  --n_epochs 36 \
   --batch_size 64 \
   --n_stability_samples 5000 \
   --diffusion_noise_schedule polynomial_2 \

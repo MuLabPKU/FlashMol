@@ -193,6 +193,7 @@ if args.resume is not None:
     tmin_liftpos = args.tmin_liftpos
     step_num_div_large = args.step_num_div_large
     step_num_div_small = args.step_num_div_small
+    step_num_liftpos = args.step_num_liftpos
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -226,6 +227,7 @@ if args.resume is not None:
     args.tmin_liftpos = tmin_liftpos
     args.step_num_div_large = step_num_div_large
     args.step_num_div_small = step_num_div_small
+    args.step_num_liftpos = step_num_liftpos
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:

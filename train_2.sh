@@ -2,7 +2,7 @@ export CUDA_VISIBLE_DEVICES=4
 python main_dmd.py \
   --exp_name dmd_qm9_trial_3 \
   --teacher_path outputs/qm9_latent2 \
-  --resume outputs/dmd_qm9_trail_difflr_0 \
+  --resume outputs/dmd_qm9_trial_difflr_0 \
   --start_epoch 7 \
   --train_diffusion \
   --step_num 20 \
@@ -37,7 +37,7 @@ export CUDA_VISIBLE_DEVICES=4
 python main_dmd.py \
   --exp_name dmd_qm9_trial_3.1 \
   --teacher_path outputs/qm9_latent2 \
-  --resume outputs/dmd_qm9_trail_difflr_0 \
+  --resume outputs/dmd_qm9_trial_difflr_0 \
   --start_epoch 7 \
   --train_diffusion \
   --step_num 20 \
@@ -72,7 +72,7 @@ export CUDA_VISIBLE_DEVICES=4
 python main_dmd.py \
   --exp_name dmd_qm9_trial_3.1 \
   --teacher_path outputs/qm9_latent2 \
-  --resume outputs/dmd_qm9_trail_difflr_0 \
+  --resume outputs/dmd_qm9_trial_difflr_0 \
   --start_epoch 7 \
   --train_diffusion \
   --step_num 20 \
