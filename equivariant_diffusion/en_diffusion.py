@@ -1305,10 +1305,10 @@ class EnLatentDiffusion(EnVariationalDiffusion):
     
     @torch.no_grad()
     def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
-        step_schedule = torch.arange(self.T, 0, - (self.T) / step_num)
+        step_schedule = torch.arange(self.T, 0.0, - (self.T) / step_num)
         z = 0
         for t in step_schedule:
-            t = t - 1
+            t = int(t) - 1
             z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
         
         x_latent, h_latent = self.sample_p_xh_given_z0(z, node_mask, edge_mask, context, fix_noise)

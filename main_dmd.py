@@ -80,6 +80,10 @@ parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--G_lr', type=float, default=2e-4)
 parser.add_argument('--mu_fake_lr', type=float, default=2e-4)
 parser.add_argument('--disc_lr', type=float, default=2e-4)
+parser.add_argument('--tmin_liftpos', type=int, default=10)
+parser.add_argument('--step_num_div', type=int, default=4)
+parser.add_argument('--step_num_liftpos', type=int, default=10)
+parser.add_argument('--gan_pos', type=int, default=7)
 parser.add_argument('--brute_force', type=eval, default=False,
                     help='True | False')
 parser.add_argument('--actnorm', type=eval, default=True,
@@ -183,6 +187,7 @@ if args.resume is not None:
     test_epochs = args.test_epochs
     coeffg = args.gan_coeffg
     coefff = args.gan_coefff
+    disc_lr = args.disc_lr
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -211,6 +216,7 @@ if args.resume is not None:
     args.test_epochs = test_epochs
     args.gan_coefff = coefff
     args.gan_coeffg = coeffg
+    args.disc_lr = disc_lr # Make sure it is compatible with previous modes where mu_fake and discriminator is jointly optimized
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:
