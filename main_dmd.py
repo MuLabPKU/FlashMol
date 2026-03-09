@@ -83,7 +83,7 @@ parser.add_argument('--disc_lr', type=float, default=2e-4)
 parser.add_argument('--tmin_liftpos', type=int, default=10)
 parser.add_argument('--step_num_div_small', type=int, default=4)
 parser.add_argument('--step_num_div_large', type=int, default=2)
-parser.add_argument('--step_num_liftpos', type=int, default=10)
+parser.add_argument('--step_num_liftpos', type=int, default=10000)
 parser.add_argument('--gan_pos', type=int, default=7)
 parser.add_argument('--brute_force', type=eval, default=False,
                     help='True | False')
@@ -189,6 +189,10 @@ if args.resume is not None:
     coeffg = args.gan_coeffg
     coefff = args.gan_coefff
     disc_lr = args.disc_lr
+    gan_pos = args.gan_pos
+    tmin_liftpos = args.tmin_liftpos
+    step_num_div_large = args.step_num_div_large
+    step_num_div_small = args.step_num_div_small
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -218,6 +222,10 @@ if args.resume is not None:
     args.gan_coefff = coefff
     args.gan_coeffg = coeffg
     args.disc_lr = disc_lr # Make sure it is compatible with previous modes where mu_fake and discriminator is jointly optimized
+    args.gan_pos = gan_pos
+    args.tmin_liftpos = tmin_liftpos
+    args.step_num_div_large = step_num_div_large
+    args.step_num_div_small = step_num_div_small
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:

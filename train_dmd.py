@@ -199,10 +199,15 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         loss_epoch.append(L_G.item())
 
         if i % args.n_report_steps == 0:
+            with torch.no_grad():
+                acc_real = (logit_D_real > 0).float().mean().item()
+                acc_fake = (logit_D_fake < 0).float().mean().item()
+                acc_d = (acc_real + acc_fake) / 2
             print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
                   f"L_gan_G: {L_gan_G.item():.4f}, L_reg: {L_reg.item():.4f}, "
-                  f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, L_disc: {L_disc.item():.4f}")
+                  f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, L_disc: {L_disc.item():.4f}, "
+                  f"D_acc: {acc_d:.2f} (real:{acc_real:.2f}/fake:{acc_fake:.2f})")
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
                 and not (epoch == 0 and i == 0) and args.train_diffusion:
