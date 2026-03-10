@@ -214,9 +214,20 @@ def main():
     generative_model.to(device)
 
     if epoch_num == -1 :
-        fn = 'G_ema.npy' if args.ema_decay > 0 else f'G.npy'
+        candidates = ['G_ema.npy', 'G.npy', 'generative_model_ema.npy', 'generative_model.npy']
     else :
-        fn = f'G_ema_{epoch_num}.npy' if args.ema_decay > 0 else f'G_{epoch_num}.npy'
+        candidates = [f'G_ema_{epoch_num}.npy', f'G_{epoch_num}.npy',
+                      f'generative_model_ema_{epoch_num}.npy', f'generative_model_{epoch_num}.npy']
+
+    fn = None
+    for c in candidates:
+        if os.path.exists(join(eval_args.model_path, c)):
+            fn = c
+            break
+    if fn is None:
+        raise FileNotFoundError(f"No model checkpoint found in {eval_args.model_path}. Tried: {candidates}")
+
+    print(f"Loading model from: {fn}")
     flow_state_dict = torch.load(join(eval_args.model_path, fn), map_location=device)
     generative_model.load_state_dict(flow_state_dict)
 
