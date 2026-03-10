@@ -169,6 +169,8 @@ def main():
                         help='Should save samples to xyz files.')
     parser.add_argument('--epoch', type=int, default=-1,
                         help='Choose which epoch to test')
+    parser.add_argument('--step_num', type=int, default=None,
+                        help='Number of denoising steps (default: use value from checkpoint, or 1)')
 
     eval_args, unparsed_args = parser.parse_known_args()
 
@@ -188,6 +190,9 @@ def main():
         args.normalization_factor = 1
     if not hasattr(args, 'aggregation_method'):
         args.aggregation_method = 'sum'
+
+    # Override step_num from command line (falls back to pickle value, then 1)
+    args.step_num = eval_args.step_num if eval_args.step_num is not None else getattr(args, 'step_num', 1)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device("cuda" if args.cuda else "cpu")
