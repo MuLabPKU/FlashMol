@@ -95,7 +95,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             if epoch <= args.step_num_liftpos :
                 z_t_hat = torch.randint(step_num // args.step_num_div_large, step_num, (1,)).item()
             else :
-                z_t_hat = torch.randint(step_num // args.step_num_div_small, step_num, (1,)).item() 
+                if args.step_num_div_small > 0 :
+                    z_t_hat = torch.randint(step_num // args.step_num_div_small, step_num, (1,)).item() 
+                else :
+                    z_t_hat = torch.randint(0, step_num, (1,)).item()
             z_fake_e = G.few_step_sample_latent(
                 step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
 
