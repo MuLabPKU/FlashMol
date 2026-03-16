@@ -1302,6 +1302,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
             z = z.detach()
         if selected_step >= 0:
             return selected_z
+        return z  # return final step output when no step is selected
     
     @torch.no_grad()
     def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
