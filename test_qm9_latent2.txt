@@ -1,0 +1,57 @@
+=== step_num=16 ===
+Validity over 20000 molecules: 77.60%
+Uniqueness over 15520 valid molecules: 91.11%
+Novelty over 14141 unique valid molecules: 66.01%
+{'mol_stable': 0.59935, 'atm_stable': 0.9371877724423288}
+Overview: val nll -338.2797056330951 test nll -337.0199691136824 {'mol_stable': 0.59935, 'atm_stable': 0.9371877724423288}
+
+=== step_num=32 ===
+Validity over 20000 molecules: 95.27%
+Uniqueness over 19053 valid molecules: 86.89%
+Novelty over 16556 unique valid molecules: 53.76%
+{'mol_stable': 0.91645, 'atm_stable': 0.990842348661702}
+Overview: val nll -334.6950534204118 test nll -336.4884095759145 {'mol_stable': 0.91645, 'atm_stable': 0.990842348661702}
+
+=== step_num=63 ===
+Validity over 20000 molecules: 97.32%
+Uniqueness over 19465 valid molecules: 84.26%
+Novelty over 16402 unique valid molecules: 46.99%
+{'mol_stable': 0.95835, 'atm_stable': 0.9950674685960318}
+Overview: val nll -333.7738288224267 test nll -339.4534590717267 {'mol_stable': 0.95835, 'atm_stable': 0.9950674685960318}
+
+=== step_num=125 ===
+Validity over 20000 molecules: 97.76%
+Uniqueness over 19552 valid molecules: 81.75%
+Novelty over 15984 unique valid molecules: 41.81%
+{'mol_stable': 0.9656, 'atm_stable': 0.9956009252462014}
+Overview: val nll -348.81059290327306 test nll -337.8889284255936 {'mol_stable': 0.9656, 'atm_stable': 0.9956009252462014}
+
+=== step_num=250 ===
+Validity over 20000 molecules: 97.73%
+Uniqueness over 19546 valid molecules: 79.60%
+Novelty over 15559 unique valid molecules: 37.12%
+{'mol_stable': 0.96625, 'atm_stable': 0.9953828459670743}
+Overview: val nll -342.6733149936238 test nll -339.2258063457687 {'mol_stable': 0.96625, 'atm_stable': 0.9953828459670743}
+
+=== step_num=500 ===
+Validity over 20000 molecules: 97.47%
+Uniqueness over 19494 valid molecules: 78.36%
+Novelty over 15275 unique valid molecules: 35.01%
+{'mol_stable': 0.96055, 'atm_stable': 0.99469591679913}
+Overview: val nll -335.01673858209267 test nll -338.8932758455219 {'mol_stable': 0.96055, 'atm_stable': 0.99469591679913}
+
+=== step_num=1000 ===
+Validity over 20000 molecules: 97.23%
+Uniqueness over 19446 valid molecules: 77.97%
+Novelty over 15162 unique valid molecules: 33.37%
+{'mol_stable': 0.9556, 'atm_stable': 0.9938394536056417}
+Overview: val nll -340.27622253679334 test nll -340.4671597031819 {'mol_stable': 0.9556, 'atm_stable': 0.9938394536056417}
+
+1000-step first checkpoint sweep | n=10000 | Thu Feb 19 07:42:44 AM UTC 2026
+95% CI at n=10000: +/- 0.69pp
+
+========================================
+Model: qm9_latent2
+========================================
+{'mol_stable': 0.9026, 'atm_stable': 0.9894988304384612}
+Overview: val nll -336.81373108972804 test nll -335.70684378720983 {'mol_stable': 0.9026, 'atm_stable': 0.9894988304384612}

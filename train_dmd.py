@@ -20,12 +20,12 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
     T = mu_real.T
     if epoch <= args.tmin_liftpos :
-        Tmin = max(1, int(0.8 * T))
+        Tmin = max(1, int(0.2 * T)) # This used to be 0.8 in previous training parts
     else :
-        Tmin = max(1, int(0.2 * T))
+        Tmin = max(1, int(args.Tmin * T))
     Tmax = int(0.98 * T)
 
-    if epoch <= 7 :
+    if epoch <= args.gan_pos :
         gan_coeffg = 0
 
     G_dp.train()
