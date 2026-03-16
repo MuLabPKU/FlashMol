@@ -1,0 +1,394 @@
+current replacing 3.1 best model with 20-step sampling
+Namespace(exp_name='dmd_qm9_trial_3.1_resume', teacher_path='outputs/qm9_latent2', teacher_epoch=None, student_path=None, train_diffusion=True, ae_path=None, trainable_ae=False, gan_coeffg=0.02, gan_coefff=1.0, reg_coeff=0.0, step_ratio=5, step_num=20, latent_nf=2, kl_weight=0.01, model='egnn_dynamics', probabilistic_model='diffusion', diffusion_noise_schedule='polynomial_2', diffusion_noise_precision=1e-05, diffusion_loss_type='l2', n_epochs=21, batch_size=64, G_lr=2e-08, mu_fake_lr=8e-08, brute_force=False, actnorm=True, break_train_epoch=False, dp=True, condition_time=True, clip_grad=True, trace='hutch', n_layers=9, inv_sublayers=1, nf=256, tanh=True, attention=True, norm_constant=1, sin_embedding=False, ode_regularization=0.001, dataset='qm9', datadir='qm9/temp', filter_n_atoms=None, dequantization='argmax_variational', n_report_steps=1, wandb_usr=None, no_wandb=False, online=True, no_cuda=False, save_model=True, generate_epochs=1, num_workers=0, test_epochs=5, data_augmentation=False, conditioning=[], resume='outputs/dmd_qm9_trial_difflr_0', start_epoch=7, ema_decay=0.9999, augment_noise=0, n_stability_samples=5000, normalize_factors=[1, 4, 10], remove_h=False, include_charges=True, visualize_every_batch=100000000.0, normalization_factor=1, aggregation_method='sum', cuda=True, context_node_nf=0, diffusion_steps=1000, current_epoch=11, disc_lr=8e-08, gan_pos=7, tmin_liftpos=5, step_num_div_large=2, step_num_div_small=4, step_num_liftpos=10, device=device(type='cuda'))
+Entropy of n_nodes: H[N] -2.475700616836548
+Autoencoder models are _not_ conditioned on time.
+alphas2 [9.99990000e-01 9.99988000e-01 9.99982000e-01 ... 2.59676966e-05
+ 1.39959211e-05 1.00039959e-05]
+gamma [-11.51291546 -11.33059532 -10.92513058 ...  10.55863126  11.17673063
+  11.51251595]
+	 100/20000 Molecules generated at 0.01 secs/sample
+	 200/20000 Molecules generated at 0.01 secs/sample
+	 300/20000 Molecules generated at 0.01 secs/sample
+	 400/20000 Molecules generated at 0.01 secs/sample
+	 500/20000 Molecules generated at 0.01 secs/sample
+	 600/20000 Molecules generated at 0.01 secs/sample
+	 700/20000 Molecules generated at 0.01 secs/sample
+	 800/20000 Molecules generated at 0.01 secs/sample
+	 900/20000 Molecules generated at 0.01 secs/sample
+	 1000/20000 Molecules generated at 0.01 secs/sample
+	 1100/20000 Molecules generated at 0.01 secs/sample
+	 1200/20000 Molecules generated at 0.01 secs/sample
+	 1300/20000 Molecules generated at 0.01 secs/sample
+	 1400/20000 Molecules generated at 0.01 secs/sample
+	 1500/20000 Molecules generated at 0.01 secs/sample
+	 1600/20000 Molecules generated at 0.01 secs/sample
+	 1700/20000 Molecules generated at 0.01 secs/sample
+	 1800/20000 Molecules generated at 0.01 secs/sample
+	 1900/20000 Molecules generated at 0.01 secs/sample
+	 2000/20000 Molecules generated at 0.01 secs/sample
+	 2100/20000 Molecules generated at 0.01 secs/sample
+	 2200/20000 Molecules generated at 0.01 secs/sample
+	 2300/20000 Molecules generated at 0.01 secs/sample
+	 2400/20000 Molecules generated at 0.01 secs/sample
+	 2500/20000 Molecules generated at 0.01 secs/sample
+	 2600/20000 Molecules generated at 0.01 secs/sample
+	 2700/20000 Molecules generated at 0.01 secs/sample
+	 2800/20000 Molecules generated at 0.01 secs/sample
+	 2900/20000 Molecules generated at 0.01 secs/sample
+	 3000/20000 Molecules generated at 0.01 secs/sample
+	 3100/20000 Molecules generated at 0.01 secs/sample
+	 3200/20000 Molecules generated at 0.01 secs/sample
+	 3300/20000 Molecules generated at 0.01 secs/sample
+	 3400/20000 Molecules generated at 0.01 secs/sample
+	 3500/20000 Molecules generated at 0.01 secs/sample
+	 3600/20000 Molecules generated at 0.01 secs/sample
+	 3700/20000 Molecules generated at 0.01 secs/sample
+	 3800/20000 Molecules generated at 0.01 secs/sample
+	 3900/20000 Molecules generated at 0.01 secs/sample
+	 4000/20000 Molecules generated at 0.01 secs/sample
+	 4100/20000 Molecules generated at 0.01 secs/sample
+	 4200/20000 Molecules generated at 0.01 secs/sample
+	 4300/20000 Molecules generated at 0.01 secs/sample
+	 4400/20000 Molecules generated at 0.01 secs/sample
+	 4500/20000 Molecules generated at 0.01 secs/sample
+	 4600/20000 Molecules generated at 0.01 secs/sample
+	 4700/20000 Molecules generated at 0.01 secs/sample
+	 4800/20000 Molecules generated at 0.01 secs/sample
+	 4900/20000 Molecules generated at 0.01 secs/sample
+	 5000/20000 Molecules generated at 0.01 secs/sample
+	 5100/20000 Molecules generated at 0.01 secs/sample
+	 5200/20000 Molecules generated at 0.01 secs/sample
+	 5300/20000 Molecules generated at 0.01 secs/sample
+	 5400/20000 Molecules generated at 0.01 secs/sample
+	 5500/20000 Molecules generated at 0.01 secs/sample
+	 5600/20000 Molecules generated at 0.01 secs/sample
+	 5700/20000 Molecules generated at 0.01 secs/sample
+	 5800/20000 Molecules generated at 0.01 secs/sample
+	 5900/20000 Molecules generated at 0.01 secs/sample
+	 6000/20000 Molecules generated at 0.01 secs/sample
+	 6100/20000 Molecules generated at 0.01 secs/sample
+	 6200/20000 Molecules generated at 0.01 secs/sample
+	 6300/20000 Molecules generated at 0.01 secs/sample
+	 6400/20000 Molecules generated at 0.01 secs/sample
+	 6500/20000 Molecules generated at 0.01 secs/sample
+	 6600/20000 Molecules generated at 0.01 secs/sample
+	 6700/20000 Molecules generated at 0.01 secs/sample
+	 6800/20000 Molecules generated at 0.01 secs/sample
+	 6900/20000 Molecules generated at 0.01 secs/sample
+	 7000/20000 Molecules generated at 0.01 secs/sample
+	 7100/20000 Molecules generated at 0.01 secs/sample
+	 7200/20000 Molecules generated at 0.01 secs/sample
+	 7300/20000 Molecules generated at 0.01 secs/sample
+	 7400/20000 Molecules generated at 0.01 secs/sample
+	 7500/20000 Molecules generated at 0.01 secs/sample
+	 7600/20000 Molecules generated at 0.01 secs/sample
+	 7700/20000 Molecules generated at 0.01 secs/sample
+	 7800/20000 Molecules generated at 0.01 secs/sample
+	 7900/20000 Molecules generated at 0.01 secs/sample
+	 8000/20000 Molecules generated at 0.01 secs/sample
+	 8100/20000 Molecules generated at 0.01 secs/sample
+	 8200/20000 Molecules generated at 0.01 secs/sample
+	 8300/20000 Molecules generated at 0.01 secs/sample
+	 8400/20000 Molecules generated at 0.01 secs/sample
+	 8500/20000 Molecules generated at 0.01 secs/sample
+	 8600/20000 Molecules generated at 0.01 secs/sample
+	 8700/20000 Molecules generated at 0.01 secs/sample
+	 8800/20000 Molecules generated at 0.01 secs/sample
+	 8900/20000 Molecules generated at 0.01 secs/sample
+	 9000/20000 Molecules generated at 0.01 secs/sample
+	 9100/20000 Molecules generated at 0.01 secs/sample
+	 9200/20000 Molecules generated at 0.01 secs/sample
+	 9300/20000 Molecules generated at 0.01 secs/sample
+	 9400/20000 Molecules generated at 0.01 secs/sample
+	 9500/20000 Molecules generated at 0.01 secs/sample
+	 9600/20000 Molecules generated at 0.01 secs/sample
+	 9700/20000 Molecules generated at 0.01 secs/sample
+	 9800/20000 Molecules generated at 0.01 secs/sample
+	 9900/20000 Molecules generated at 0.01 secs/sample
+	 10000/20000 Molecules generated at 0.01 secs/sample
+	 10100/20000 Molecules generated at 0.01 secs/sample
+	 10200/20000 Molecules generated at 0.01 secs/sample
+	 10300/20000 Molecules generated at 0.01 secs/sample
+	 10400/20000 Molecules generated at 0.01 secs/sample
+	 10500/20000 Molecules generated at 0.01 secs/sample
+	 10600/20000 Molecules generated at 0.01 secs/sample
+	 10700/20000 Molecules generated at 0.01 secs/sample
+	 10800/20000 Molecules generated at 0.01 secs/sample
+	 10900/20000 Molecules generated at 0.01 secs/sample
+	 11000/20000 Molecules generated at 0.01 secs/sample
+	 11100/20000 Molecules generated at 0.01 secs/sample
+	 11200/20000 Molecules generated at 0.01 secs/sample
+	 11300/20000 Molecules generated at 0.01 secs/sample
+	 11400/20000 Molecules generated at 0.01 secs/sample
+	 11500/20000 Molecules generated at 0.01 secs/sample
+	 11600/20000 Molecules generated at 0.01 secs/sample
+	 11700/20000 Molecules generated at 0.01 secs/sample
+	 11800/20000 Molecules generated at 0.01 secs/sample
+	 11900/20000 Molecules generated at 0.01 secs/sample
+	 12000/20000 Molecules generated at 0.01 secs/sample
+	 12100/20000 Molecules generated at 0.01 secs/sample
+	 12200/20000 Molecules generated at 0.01 secs/sample
+	 12300/20000 Molecules generated at 0.01 secs/sample
+	 12400/20000 Molecules generated at 0.01 secs/sample
+	 12500/20000 Molecules generated at 0.01 secs/sample
+	 12600/20000 Molecules generated at 0.01 secs/sample
+	 12700/20000 Molecules generated at 0.01 secs/sample
+	 12800/20000 Molecules generated at 0.01 secs/sample
+	 12900/20000 Molecules generated at 0.01 secs/sample
+	 13000/20000 Molecules generated at 0.01 secs/sample
+	 13100/20000 Molecules generated at 0.01 secs/sample
+	 13200/20000 Molecules generated at 0.01 secs/sample
+	 13300/20000 Molecules generated at 0.01 secs/sample
+	 13400/20000 Molecules generated at 0.01 secs/sample
+	 13500/20000 Molecules generated at 0.01 secs/sample
+	 13600/20000 Molecules generated at 0.01 secs/sample
+	 13700/20000 Molecules generated at 0.01 secs/sample
+	 13800/20000 Molecules generated at 0.01 secs/sample
+	 13900/20000 Molecules generated at 0.01 secs/sample
+	 14000/20000 Molecules generated at 0.01 secs/sample
+	 14100/20000 Molecules generated at 0.01 secs/sample
+	 14200/20000 Molecules generated at 0.01 secs/sample
+	 14300/20000 Molecules generated at 0.01 secs/sample
+	 14400/20000 Molecules generated at 0.01 secs/sample
+	 14500/20000 Molecules generated at 0.01 secs/sample
+	 14600/20000 Molecules generated at 0.01 secs/sample
+	 14700/20000 Molecules generated at 0.01 secs/sample
+	 14800/20000 Molecules generated at 0.01 secs/sample
+	 14900/20000 Molecules generated at 0.01 secs/sample
+	 15000/20000 Molecules generated at 0.01 secs/sample
+	 15100/20000 Molecules generated at 0.01 secs/sample
+	 15200/20000 Molecules generated at 0.01 secs/sample
+	 15300/20000 Molecules generated at 0.01 secs/sample
+	 15400/20000 Molecules generated at 0.01 secs/sample
+	 15500/20000 Molecules generated at 0.01 secs/sample
+	 15600/20000 Molecules generated at 0.01 secs/sample
+	 15700/20000 Molecules generated at 0.01 secs/sample
+	 15800/20000 Molecules generated at 0.01 secs/sample
+	 15900/20000 Molecules generated at 0.01 secs/sample
+	 16000/20000 Molecules generated at 0.01 secs/sample
+	 16100/20000 Molecules generated at 0.01 secs/sample
+	 16200/20000 Molecules generated at 0.01 secs/sample
+	 16300/20000 Molecules generated at 0.01 secs/sample
+	 16400/20000 Molecules generated at 0.01 secs/sample
+	 16500/20000 Molecules generated at 0.01 secs/sample
+	 16600/20000 Molecules generated at 0.01 secs/sample
+	 16700/20000 Molecules generated at 0.01 secs/sample
+	 16800/20000 Molecules generated at 0.01 secs/sample
+	 16900/20000 Molecules generated at 0.01 secs/sample
+	 17000/20000 Molecules generated at 0.01 secs/sample
+	 17100/20000 Molecules generated at 0.01 secs/sample
+	 17200/20000 Molecules generated at 0.01 secs/sample
+	 17300/20000 Molecules generated at 0.01 secs/sample
+	 17400/20000 Molecules generated at 0.01 secs/sample
+	 17500/20000 Molecules generated at 0.01 secs/sample
+	 17600/20000 Molecules generated at 0.01 secs/sample
+	 17700/20000 Molecules generated at 0.01 secs/sample
+	 17800/20000 Molecules generated at 0.01 secs/sample
+	 17900/20000 Molecules generated at 0.01 secs/sample
+	 18000/20000 Molecules generated at 0.01 secs/sample
+	 18100/20000 Molecules generated at 0.01 secs/sample
+	 18200/20000 Molecules generated at 0.01 secs/sample
+	 18300/20000 Molecules generated at 0.01 secs/sample
+	 18400/20000 Molecules generated at 0.01 secs/sample
+	 18500/20000 Molecules generated at 0.01 secs/sample
+	 18600/20000 Molecules generated at 0.01 secs/sample
+	 18700/20000 Molecules generated at 0.01 secs/sample
+	 18800/20000 Molecules generated at 0.01 secs/sample
+	 18900/20000 Molecules generated at 0.01 secs/sample
+	 19000/20000 Molecules generated at 0.01 secs/sample
+	 19100/20000 Molecules generated at 0.01 secs/sample
+	 19200/20000 Molecules generated at 0.01 secs/sample
+	 19300/20000 Molecules generated at 0.01 secs/sample
+	 19400/20000 Molecules generated at 0.01 secs/sample
+	 19500/20000 Molecules generated at 0.01 secs/sample
+	 19600/20000 Molecules generated at 0.01 secs/sample
+	 19700/20000 Molecules generated at 0.01 secs/sample
+	 19800/20000 Molecules generated at 0.01 secs/sample
+	 19900/20000 Molecules generated at 0.01 secs/sample
+	 20000/20000 Molecules generated at 0.01 secs/sample
+Validity over 20000 molecules: 88.91%
+Uniqueness over 17781 valid molecules: 92.04%
+Novelty over 16365 unique valid molecules: 60.70%
+{'mol_stable': 0.7644, 'atm_stable': 0.9694134430970693}
+Validity 0.8891, Uniqueness: 0.9204, Novelty: 0.6070
+
+Final test nll -341.42606882624403
+Overview: val nll -345.90866864702843 test nll -341.42606882624403 {'mol_stable': 0.7644, 'atm_stable': 0.9694134430970693}
+current 3.6 best model with 20-step sampling
+Validity over 20000 molecules: 88.78%
+Uniqueness over 17756 valid molecules: 92.08%
+Novelty over 16349 unique valid molecules: 60.21%
+{'mol_stable': 0.7663, 'atm_stable': 0.9701132535798944}
+Overview: val nll -332.59160497947835 test nll -342.85723983786806 {'mol_stable': 0.7663, 'atm_stable': 0.9701132535798944}
+
+
+current resume25 best model with 20-step sampling@epoch25
+Validity over 20000 molecules: 89.91%
+Uniqueness over 17982 valid molecules: 93.64%
+Novelty over 16839 unique valid molecules: 61.68%
+{'mol_stable': 0.764, 'atm_stable': 0.9696564615568085}
+Overview: val nll -335.6552032202462 test nll -330.83217894313515 {'mol_stable': 0.764, 'atm_stable': 0.9696564615568085}
+
+current resume25 best model with 20-step sampling @ 20
+Validity over 20000 molecules: 87.44%
+Uniqueness over 17487 valid molecules: 90.35%
+Novelty over 15799 unique valid molecules: 60.89%
+{'mol_stable': 0.75465, 'atm_stable': 0.9678331242957093}
+Overview: val nll -348.7941478138602 test nll -350.63727819554566 {'mol_stable': 0.75465, 'atm_stable': 0.9678331242957093}
+
+current resume25 best model with 20-step sampling @ 20
+Validity over 20000 molecules: 87.45%
+Uniqueness over 17490 valid molecules: 90.57%
+Novelty over 15841 unique valid molecules: 60.84%
+{'mol_stable': 0.7566, 'atm_stable': 0.9685852396967578}
+Overview: val nll -356.7615571519612 test nll -350.88509491172067 {'mol_stable': 0.7566, 'atm_stable': 0.9685852396967578}
+current 16step best : dmd_qm9_trial_step16_lowlr 
+
+Validity over 20000 molecules: 81.17%
+Uniqueness over 16234 valid molecules: 93.80%
+Novelty over 15228 unique valid molecules: 65.69%
+{'mol_stable': 0.60685, 'atm_stable': 0.9396084629675845}
+Overview: val nll -330.1132452437973 test nll -337.9336562059509 {'mol_stable': 0.60685, 'atm_stable': 0.9396084629675845}
+current 20 best :dmd_qm9_trial_3.10_resume 
+Validity over 20000 molecules: 90.00%
+Uniqueness over 18000 valid molecules: 94.59%
+Novelty over 17026 unique valid molecules: 61.27%
+{'mol_stable': 0.76945, 'atm_stable': 0.9710811261036149}
+Overview: val nll -323.4651257126133 test nll -327.00336445288895 {'mol_stable': 0.76945, 'atm_stable': 0.9710811261036149}
+current 20 best :dmd_qm9_trial_3.10_resume 
+Validity over 20000 molecules: 89.95%
+Uniqueness over 17991 valid molecules: 94.56%
+Novelty over 17012 unique valid molecules: 60.55%
+{'mol_stable': 0.76845, 'atm_stable': 0.9705096214961961}
+Overview: val nll -337.2502600046759 test nll -325.50053417927757 {'mol_stable': 0.76845, 'atm_stable': 0.9705096214961961}
+
+
+
+======================
+current 32 best: dmd_qm9_trial_step32_highlr_nostepnum_lowT@10
+Validity over 20000 molecules: 95.09%
+Uniqueness over 19018 valid molecules: 90.99%
+Novelty over 17304 unique valid molecules: 53.19%
+{'mol_stable': 0.9295, 'atm_stable': 0.9917941585535466}
+Overview: val nll -245.59496304106008 test nll -242.2039873288347 {'mol_stable': 0.9295, 'atm_stable': 0.9917941585535466}
+=======================
+
+
+
+
+current 32 best: dmd_qm9_trial_step32_highlr_nostepnum_lowT@15
+Validity over 20000 molecules: 95.31%
+Uniqueness over 19062 valid molecules: 87.55%
+Novelty over 16689 unique valid molecules: 54.79%
+{'mol_stable': 0.89355, 'atm_stable': 0.945903843222042}
+Overview: val nll -143.21859318387382 test nll -143.01177337513525 {'mol_stable': 0.89355, 'atm_stable': 0.945903843222042}
+current 20best: dmd_qm9_trial_3.12@15
+Validity over 40000 molecules: 89.04%
+Uniqueness over 35616 valid molecules: 90.45%
+Novelty over 32213 unique valid molecules: 60.56%
+{'mol_stable': 0.7895, 'atm_stable': 0.9748100632175062}
+Overview: val nll -348.4141691223791 test nll -338.23192045950503 {'mol_stable': 0.7895, 'atm_stable': 0.9748100632175062}
+current 20best: dmd_qm9_trial_3.12@15
+Validity over 40000 molecules: 88.56%
+Uniqueness over 35425 valid molecules: 90.39%
+Novelty over 32019 unique valid molecules: 59.99%
+{'mol_stable': 0.787525, 'atm_stable': 0.9745514291097295}
+Overview: val nll -341.0844884412042 test nll -336.1519895534199 {'mol_stable': 0.787525, 'atm_stable': 0.9745514291097295}
+current 20best: dmd_qm9_trial_3.12@20
+Validity over 40000 molecules: 88.05%
+Uniqueness over 35219 valid molecules: 89.37%
+Novelty over 31475 unique valid molecules: 57.99%
+{'mol_stable': 0.799475, 'atm_stable': 0.9759213336900338}
+Overview: val nll -339.8377850480732 test nll -332.88524883736494 {'mol_stable': 0.799475, 'atm_stable': 0.9759213336900338}
+current 20best: dmd_qm9_trial_32step3.1@5
+Validity over 40000 molecules: 91.12%
+Uniqueness over 36448 valid molecules: 85.20%
+Novelty over 31055 unique valid molecules: 57.36%
+{'mol_stable': 0.845875, 'atm_stable': 0.9824495064919235}
+Overview: val nll -343.9531077156471 test nll -340.3629022921479 {'mol_stable': 0.845875, 'atm_stable': 0.9824495064919235}
+current 20best: dmd_qm9_trial_32step3.1@10
+current 20best: dmd_qm9_trial_32step3.1@10
+Validity over 40000 molecules: 91.92%
+Uniqueness over 36766 valid molecules: 84.88%
+Novelty over 31206 unique valid molecules: 54.84%
+{'mol_stable': 0.8689, 'atm_stable': 0.9856320962666186}
+Overview: val nll -334.4470800709719 test nll -331.2842290485105 {'mol_stable': 0.8689, 'atm_stable': 0.9856320962666186}
+current 20best: dmd_qm9_trial_3.17@10
+current 20best: dmd_qm9_trial_3.17_lowlr_resume@15
+current 20best: dmd_qm9_trial_3.17_lowlr_resume@15
+Validity over 40000 molecules: 92.70%
+Uniqueness over 37081 valid molecules: 83.77%
+Novelty over 31062 unique valid molecules: 54.71%
+{'mol_stable': 0.88635, 'atm_stable': 0.9875891935680756}
+Overview: val nll -333.7170513601004 test nll -328.3869405455904 {'mol_stable': 0.88635, 'atm_stable': 0.9875891935680756}
+current 20best: dmd_qm9_trial_3.17@10
+Validity over 40000 molecules: 92.73%
+Uniqueness over 37092 valid molecules: 83.81%
+Novelty over 31085 unique valid molecules: 54.83%
+{'mol_stable': 0.8863, 'atm_stable': 0.9874895931620137}
+Overview: val nll -338.1866870370297 test nll -324.8343308604275 {'mol_stable': 0.8863, 'atm_stable': 0.9874895931620137}
+current 20best: dmd_qm9_trial_3.17@15
+Validity over 40000 molecules: 92.72%
+Uniqueness over 37087 valid molecules: 84.54%
+Novelty over 31352 unique valid molecules: 55.45%
+{'mol_stable': 0.887775, 'atm_stable': 0.9860609060619044}
+Overview: val nll -333.61940280655523 test nll -319.40204632036057 {'mol_stable': 0.887775, 'atm_stable': 0.9860609060619044}
+
+current 32best: dmd_qm9_trial_32step3.2@15
+Validity over 40000 molecules: 95.27%
+Uniqueness over 38109 valid molecules: 83.45%
+Novelty over 31803 unique valid molecules: 51.87%
+{'mol_stable': 0.9276, 'atm_stable': 0.9921131055513203}
+Overview: val nll -323.7466322198386 test nll -327.86301032701033 {'mol_stable': 0.9276, 'atm_stable': 0.9921131055513203}
+current 32best: dmd_qm9_trial_32step3.2@20
+Validity over 40000 molecules: 95.27%
+Uniqueness over 38109 valid molecules: 83.46%
+Novelty over 31806 unique valid molecules: 52.32%
+{'mol_stable': 0.9311, 'atm_stable': 0.992829921980017}
+Overview: val nll -321.404508200803 test nll -312.9240870305124 {'mol_stable': 0.9311, 'atm_stable': 0.992829921980017}
+current 20best: dmd_qm9_trial_3.17@20
+Validity over 40000 molecules: 92.63%
+Uniqueness over 37053 valid molecules: 84.27%
+Novelty over 31224 unique valid molecules: 56.38%
+{'mol_stable': 0.88215, 'atm_stable': 0.9798330349999792}
+Overview: val nll -310.81219722463226 test nll -311.58773331123507 {'mol_stable': 0.88215, 'atm_stable': 0.9798330349999792}
+current 20best: dmd_qm9_trial_3.17_highlr_resume@20
+Validity over 40000 molecules: 93.43%
+Uniqueness over 37372 valid molecules: 83.60%
+Novelty over 31244 unique valid molecules: 55.41%
+{'mol_stable': 0.9008, 'atm_stable': 0.9877973003711573}
+Overview: val nll -317.2589563555026 test nll -320.6619106060338 {'mol_stable': 0.9008, 'atm_stable': 0.9877973003711573}
+current 20best: dmd_qm9_trial_3.17_highlr_resume@15
+Validity over 40000 molecules: 93.05%
+Uniqueness over 37220 valid molecules: 84.58%
+Novelty over 31481 unique valid molecules: 55.66%
+{'mol_stable': 0.89245, 'atm_stable': 0.9882501351594882}
+Overview: val nll -329.522772695504 test nll -332.4797833237491 {'mol_stable': 0.89245, 'atm_stable': 0.9882501351594882}
+current 20best: dmd_qm9_trial_3.17_highlr_resume@25
+Validity over 40000 molecules: 94.50%
+Uniqueness over 37801 valid molecules: 84.11%
+Novelty over 31795 unique valid molecules: 54.39%
+{'mol_stable': 0.91825, 'atm_stable': 0.9910993027416979}
+Overview: val nll -321.4889373744907 test nll -327.6966718721962 {'mol_stable': 0.91825, 'atm_stable': 0.9910993027416979}
+current 20best: dmd_qm9_trial_3.17_highlr_resume@25
+Validity over 40000 molecules: 93.35%
+Uniqueness over 37340 valid molecules: 82.77%
+Novelty over 30908 unique valid molecules: 56.21%
+{'mol_stable': 0.899625, 'atm_stable': 0.9848372447741532}
+Overview: val nll -314.43464097338324 test nll -315.12497905826547 {'mol_stable': 0.899625, 'atm_stable': 0.9848372447741532}
+current 20best: dmd_qm9_trial_3.17_highlr_resume@20
+Validity over 40000 molecules: 93.55%
+Uniqueness over 37422 valid molecules: 83.69%
+Novelty over 31320 unique valid molecules: 55.73%
+{'mol_stable': 0.902275, 'atm_stable': 0.9883066556674731}
+Overview: val nll -318.87772864427063 test nll -317.1701081579544 {'mol_stable': 0.902275, 'atm_stable': 0.9883066556674731}
+
+
+============
+current 20best: dmd_qm9_trial_3.17_highlr(new_green line)@10
+Validity over 40000 molecules: 93.43%
+Uniqueness over 37371 valid molecules: 82.90%
+Novelty over 30982 unique valid molecules: 55.00%
+{'mol_stable': 0.8987, 'atm_stable': 0.9887178521117493}
+Overview: val nll -321.1281727620388 test nll -321.6444293700873 {'mol_stable': 0.8987, 'atm_stable': 0.9887178521117493}
+============

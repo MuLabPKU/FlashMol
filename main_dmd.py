@@ -22,10 +22,36 @@ from train_dmd import train_epoch, test, analyze_and_save
 from dmd.discriminator import MolecularDiscriminator
 
 '''
-python main_progdistill.py --n_epochs 30 --n_stability_samples 10 --diffusion_noise_schedule polynomial_2 
---diffusion_noise_precision 1e-5 --diffusion_loss_type l2 --batch_size 64 --nf 256
---n_layers 9 --lr 1e-4 --normalize_factors [1,4,10] --test_epochs 10 --ema_decay 0.9999 --train_diffusion
---latent_nf 2 --exp_name $student_name --teacher_path outputs/$teacher_model
+python main_dmd.py \
+  --exp_name dmd_qm9_trial_32step3.3 \
+  --teacher_path outputs/qm9_latent2 \
+  --train_diffusion \
+  --step_num 32 \
+  --n_epochs 26 \
+  --batch_size 64 \
+  --n_stability_samples 5000 \
+  --diffusion_noise_schedule polynomial_2 \
+  --diffusion_noise_precision 1e-5 \
+  --diffusion_loss_type l2 \
+  --nf 256 \
+  --n_layers 9 \
+  --normalize_factors '[1,4,10]' \
+  --test_epochs 5 \
+  --ema_decay 0.9999 \
+  --latent_nf 2 \
+  --gan_coeffg 0.2 \
+  --gan_coefff 1 \
+  --gan_pos 0\
+  --step_ratio 5 \
+  --reg_coeff 0.0 \
+  --G_lr 2e-8 \
+  --mu_fake_lr 8e-8 \
+  --disc_lr 8e-4 \
+  --tmin_liftpos 0 \
+  --step_num_div_small 4 \
+  --step_num_div_large 2 \
+  --step_num_liftpos 10000 \
+  --Tmin 0.002
 '''
 
 parser = argparse.ArgumentParser(description='ProgDistillatsion')
@@ -81,6 +107,7 @@ parser.add_argument('--G_lr', type=float, default=2e-4)
 parser.add_argument('--mu_fake_lr', type=float, default=2e-4)
 parser.add_argument('--disc_lr', type=float, default=2e-4)
 parser.add_argument('--tmin_liftpos', type=int, default=10)
+parser.add_argument('--Tmin', type=float, default=0.2)
 parser.add_argument('--step_num_div_small', type=int, default=4)
 parser.add_argument('--step_num_div_large', type=int, default=2)
 parser.add_argument('--step_num_liftpos', type=int, default=10000)
@@ -188,12 +215,15 @@ if args.resume is not None:
     test_epochs = args.test_epochs
     coeffg = args.gan_coeffg
     coefff = args.gan_coefff
+    G_lr = args.G_lr
+    mu_fake_lr = args.mu_fake_lr
     disc_lr = args.disc_lr
     gan_pos = args.gan_pos
     tmin_liftpos = args.tmin_liftpos
     step_num_div_large = args.step_num_div_large
     step_num_div_small = args.step_num_div_small
     step_num_liftpos = args.step_num_liftpos
+    Tmin = args.Tmin
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -222,12 +252,15 @@ if args.resume is not None:
     args.test_epochs = test_epochs
     args.gan_coefff = coefff
     args.gan_coeffg = coeffg
-    args.disc_lr = disc_lr # Make sure it is compatible with previous modes where mu_fake and discriminator is jointly optimized
+    args.G_lr = G_lr
+    args.mu_fake_lr = mu_fake_lr
+    args.disc_lr = disc_lr
     args.gan_pos = gan_pos
     args.tmin_liftpos = tmin_liftpos
     args.step_num_div_large = step_num_div_large
     args.step_num_div_small = step_num_div_small
     args.step_num_liftpos = step_num_liftpos
+    args.Tmin = Tmin
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:
@@ -504,6 +537,15 @@ def main():
             print("Loaded optim_d state from checkpoint")
         except FileNotFoundError:
             print("WARNING: optim_d.npy not found, starting with fresh optimizer state")
+
+        # Override learning rates from command line (load_state_dict restores old lr)
+        for pg in optim_G.param_groups:
+            pg['lr'] = args.G_lr
+        for pg in optim_fake.param_groups:
+            pg['lr'] = args.mu_fake_lr
+        for pg in optim_d.param_groups:
+            pg['lr'] = args.disc_lr
+        print(f"Overriding lr: G_lr={args.G_lr}, mu_fake_lr={args.mu_fake_lr}, disc_lr={args.disc_lr}")
 
         print(f"Successfully resumed from epoch {args.start_epoch}")
 
