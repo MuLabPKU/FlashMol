@@ -129,6 +129,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
             L_disc = F.softplus(-logit_D_real).mean() \
                     + F.softplus(logit_D_fake).mean()
+            
+            L_disc = soft_clamp(L_disc, 5)
+            L_fake_diffusion = soft_clamp(L_fake_diffusion, 5)
 
             L_fake = L_fake_diffusion + gan_coefff * L_disc
 
@@ -165,7 +168,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         logit_fake = discriminator._forward(node_mask, edge_mask)       # [B]
         L_gan_G = F.softplus(-logit_fake).mean()
 
-        L_dmd = soft_clamp(L_dmd, 30)
+        L_gan_G = soft_clamp(L_gan_G, 5)
+
+        L_dmd = soft_clamp(L_dmd, 5)
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
 
