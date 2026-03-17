@@ -108,6 +108,7 @@ parser.add_argument('--mu_fake_lr', type=float, default=2e-4)
 parser.add_argument('--disc_lr', type=float, default=2e-4)
 parser.add_argument('--tmin_liftpos', type=int, default=10)
 parser.add_argument('--Tmin', type=float, default=0.2)
+parser.add_argument('--Tminpre', type=float, default=0.8)
 parser.add_argument('--step_num_small', type=int, default=4)
 parser.add_argument('--step_num_large', type=int, default=2)
 parser.add_argument('--step_num_liftpos', type=int, default=10000)
@@ -227,6 +228,7 @@ if args.resume is not None:
     step_ratio = args.step_ratio
     reg_coeff = args.reg_coeff
     step_num = args.step_num
+    Tminpre = args.Tminpre
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -267,6 +269,7 @@ if args.resume is not None:
     args.step_ratio = step_ratio
     args.reg_coeff = reg_coeff
     args.step_num = step_num
+    args.Tminpre = Tminpre
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:
