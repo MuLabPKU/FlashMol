@@ -48,8 +48,8 @@ python main_dmd.py \
   --mu_fake_lr 8e-8 \
   --disc_lr 8e-4 \
   --tmin_liftpos 0 \
-  --step_num_div_small 4 \
-  --step_num_div_large 2 \
+  --step_num_small 4 \
+  --step_num_large 2 \
   --step_num_liftpos 10000 \
   --Tmin 0.002
 '''
@@ -108,8 +108,8 @@ parser.add_argument('--mu_fake_lr', type=float, default=2e-4)
 parser.add_argument('--disc_lr', type=float, default=2e-4)
 parser.add_argument('--tmin_liftpos', type=int, default=10)
 parser.add_argument('--Tmin', type=float, default=0.2)
-parser.add_argument('--step_num_div_small', type=int, default=4)
-parser.add_argument('--step_num_div_large', type=int, default=2)
+parser.add_argument('--step_num_small', type=int, default=4)
+parser.add_argument('--step_num_large', type=int, default=2)
 parser.add_argument('--step_num_liftpos', type=int, default=10000)
 parser.add_argument('--gan_pos', type=int, default=7)
 parser.add_argument('--brute_force', type=eval, default=False,
@@ -220,8 +220,8 @@ if args.resume is not None:
     disc_lr = args.disc_lr
     gan_pos = args.gan_pos
     tmin_liftpos = args.tmin_liftpos
-    step_num_div_large = args.step_num_div_large
-    step_num_div_small = args.step_num_div_small
+    step_num_large = args.step_num_large
+    step_num_small = args.step_num_small
     step_num_liftpos = args.step_num_liftpos
     Tmin = args.Tmin
     step_ratio = args.step_ratio
@@ -260,8 +260,8 @@ if args.resume is not None:
     args.disc_lr = disc_lr
     args.gan_pos = gan_pos
     args.tmin_liftpos = tmin_liftpos
-    args.step_num_div_large = step_num_div_large
-    args.step_num_div_small = step_num_div_small
+    args.step_num_large = step_num_large
+    args.step_num_small = step_num_small
     args.step_num_liftpos = step_num_liftpos
     args.Tmin = Tmin
     args.step_ratio = step_ratio

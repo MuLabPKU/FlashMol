@@ -93,10 +93,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             # Select which step to backprop through BEFORE generating,
             # so only 1 step keeps its computation graph (saves ~(step_num-1)x GPU memory).
             if epoch <= args.step_num_liftpos :
-                z_t_hat = torch.randint(step_num // args.step_num_div_large, step_num, (1,)).item()
+                z_t_hat = torch.randint(args.step_num_large, step_num, (1,)).item()
             else :
                 if args.step_num_div_small > 0 :
-                    z_t_hat = torch.randint(step_num // args.step_num_div_small, step_num, (1,)).item() 
+                    z_t_hat = torch.randint(args.step_num_small, step_num, (1,)).item() 
                 else :
                     z_t_hat = torch.randint(0, step_num, (1,)).item()
             z_fake_e = G.few_step_sample_latent(
