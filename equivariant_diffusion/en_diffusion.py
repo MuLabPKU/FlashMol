@@ -1295,13 +1295,12 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         z = 0
         selected_z = None
         for i, t in enumerate(step_schedule):
-            t = t - 1
+            t = max(0, int(t) - 1)
             z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
             if i == selected_step:
                 selected_z = z
+                return selected_z
             z = z.detach()
-        if selected_step >= 0:
-            return selected_z
         return z  # return final step output when no step is selected
     
     @torch.no_grad()

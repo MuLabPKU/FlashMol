@@ -95,10 +95,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             if epoch <= args.step_num_liftpos :
                 z_t_hat = torch.randint(args.step_num_large, step_num, (1,)).item()
             else :
-                if args.step_num_div_small > 0 :
-                    z_t_hat = torch.randint(args.step_num_small, step_num, (1,)).item() 
-                else :
-                    z_t_hat = torch.randint(0, step_num, (1,)).item()
+                z_t_hat = torch.randint(args.step_num_small, step_num, (1,)).item() 
             z_fake_e = G.few_step_sample_latent(
                 step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
 
@@ -126,8 +123,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
             x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
-            with torch.no_grad() : # To save memory, mu_fake is not trained with L_disc loss
-                mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
+            mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
             logit_D_real = discriminator._forward(node_mask, edge_mask)     # log D(real) [B]
 
             # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
@@ -159,7 +155,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
         latent_nf = s_fake.shape[-1]
         d_s = (s_fake - s_real).detach()
-        L_dmd = (d_s * z_fake_e).sum(dim=[1, 2]).mean() / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
+        L_dmd = (d_s * z_fake_t).sum(dim=[1, 2]).mean() / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
 
         # Latent scale regularization: penalize z_fake_e variance mismatch with real latents
         L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
