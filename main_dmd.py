@@ -413,7 +413,7 @@ if args.train_diffusion:
             in_node_nf=args.nf,  # must match mu_fake's EGNN hidden_nf
             n_dims=3,
             device=device)
-        discriminator.attach_to(mu_fake)  # hook registration — must redo after resume
+        discriminator.attach_to(mu_fake, hook_layer='e_block_5')  # hook registration — must redo after resume
 
     else:
         # Progressive distillation requires a teacher model

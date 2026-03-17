@@ -66,13 +66,31 @@ class MolecularDiscriminator(nn.Module):
         logits = logits.squeeze(-1).squeeze(-1)                  # [B]
         return logits
 
-    def attach_to(self, mu_fake: EnVariationalDiffusion):
-        """Register a forward hook on mu_fake.egnn.embedding_out.
-        Captures input[0] (pre-projection, [B*N, hidden_nf]) into self.mu_fake_out."""
-        def _hook(_module, input, _output):
-            if self.detach_hook:
-                self.mu_fake_out = input[0].detach()
-            else:
-                self.mu_fake_out = input[0]
+    def attach_to(self, mu_fake: EnVariationalDiffusion, hook_layer='embedding_out'):
+        """Register a forward hook on a layer of mu_fake's EGNN.
 
-        mu_fake.dynamics.egnn.embedding_out.register_forward_hook(_hook)
+        hook_layer: 'embedding_out' (default, captures input[0] before final projection)
+                    or 'e_block_N' (captures output h from the N-th EquivariantBlock).
+        """
+        egnn = mu_fake.dynamics.egnn
+
+        if hook_layer == 'embedding_out':
+            target = egnn.embedding_out
+            def _hook(_module, input, _output):
+                if self.detach_hook:
+                    self.mu_fake_out = input[0].detach()
+                else:
+                    self.mu_fake_out = input[0]
+        elif hook_layer.startswith('e_block_'):
+            target = getattr(egnn, hook_layer)
+            def _hook(_module, _input, output):
+                # EquivariantBlock.forward returns (h, x); capture h [B*N, hidden_nf]
+                h = output[0]
+                if self.detach_hook:
+                    self.mu_fake_out = h.detach()
+                else:
+                    self.mu_fake_out = h
+        else:
+            raise ValueError(f"Unknown hook_layer '{hook_layer}'. Use 'embedding_out' or 'e_block_N'.")
+
+        target.register_forward_hook(_hook)

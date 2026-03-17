@@ -115,7 +115,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # gan_coeff scales L_disc only; no separate mu_fake GAN term.
         # ================================================================
 
-        discriminator.detach_hook = True   # detach hook features during mu_fake/D update
+        discriminator.detach_hook = False   # Do not detach hook features during mu_fake/D update
         for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
