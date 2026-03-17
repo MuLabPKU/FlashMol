@@ -168,7 +168,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         logit_fake = discriminator._forward(node_mask, edge_mask)       # [B]
         L_gan_G = F.softplus(-logit_fake).mean()
 
-        weighting_factor = abs(z_fake_e - s_real).mean (dim=[1, 2, 3], keepdim=True)
+        weighting_factor = (z_fake_e - s_real).abs().mean(dim=[1, 2], keepdim=True)
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
         L_G = L_G / weighting_factor
