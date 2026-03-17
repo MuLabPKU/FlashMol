@@ -168,11 +168,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         logit_fake = discriminator._forward(node_mask, edge_mask)       # [B]
         L_gan_G = F.softplus(-logit_fake).mean()
 
-        L_gan_G = soft_clamp(L_gan_G, 5)
-
-        L_dmd = soft_clamp(L_dmd, 5)
+        weighting_factor = abs(z_fake_e - s_real).mean (dim=[1, 2, 3], keepdim=True)
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
+        L_G = L_G / weighting_factor
 
         if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
             print(f"z_fake_e stats: min={z_fake_e.min():.2f}, max={z_fake_e.max():.2f}")
