@@ -112,6 +112,7 @@ parser.add_argument('--Tminpre', type=float, default=0.8)
 parser.add_argument('--step_num_small', type=int, default=4)
 parser.add_argument('--step_num_large', type=int, default=2)
 parser.add_argument('--step_num_liftpos', type=int, default=None)
+parser.add_argument('--step_num_pow', type=float, default=0.75)
 parser.add_argument('--gan_pos', type=int, default=7)
 parser.add_argument('--brute_force', type=eval, default=False,
                     help='True | False')
@@ -229,6 +230,7 @@ if args.resume is not None:
     reg_coeff = args.reg_coeff
     step_num = args.step_num
     Tminpre = args.Tminpre
+    step_num_pow = args.step_num_pow
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -270,6 +272,7 @@ if args.resume is not None:
     args.reg_coeff = reg_coeff
     args.step_num = step_num
     args.Tminpre = Tminpre
+    args.step_num_pow = step_num_pow
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:

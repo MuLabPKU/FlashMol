@@ -100,7 +100,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             else :
                 z_t_hat = torch.randint(step_low(args.start_epoch, epoch, 
                                         args.n_epochs, args.step_num_small, 
-                                        args.step_num_large), step_num, (1,)).item() 
+                                        args.step_num_large, args.step_num_pow), step_num, (1,)).item() 
 
             z_fake_e = G.few_step_sample_latent(
                 step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
@@ -418,7 +418,7 @@ def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, ep
 def soft_clamp(x, limit=15.0, temperature=1.0) :
     return limit * torch.tanh(x / (limit * temperature))
 
-def step_low(start_epoch, cur_epoch, total_epoch, step_num_small, step_num_large, power=2.0) :
+def step_low(start_epoch, cur_epoch, total_epoch, step_num_small, step_num_large, power=0.75) :
     """Progressively lower the z_t_hat lower bound from step_num_large to step_num_small.
     step_num_large = large lower bound (safe, used at start).
     step_num_small = small lower bound (aggressive, used at end).
