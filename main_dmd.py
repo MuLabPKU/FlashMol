@@ -111,7 +111,7 @@ parser.add_argument('--Tmin', type=float, default=0.2)
 parser.add_argument('--Tminpre', type=float, default=0.8)
 parser.add_argument('--step_num_small', type=int, default=4)
 parser.add_argument('--step_num_large', type=int, default=2)
-parser.add_argument('--step_num_liftpos', type=int, default=10000)
+parser.add_argument('--step_num_liftpos', type=int, default=None)
 parser.add_argument('--gan_pos', type=int, default=7)
 parser.add_argument('--brute_force', type=eval, default=False,
                     help='True | False')

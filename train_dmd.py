@@ -92,10 +92,16 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         else :
             # Select which step to backprop through BEFORE generating,
             # so only 1 step keeps its computation graph (saves ~(step_num-1)x GPU memory).
-            if epoch <= args.step_num_liftpos :
-                z_t_hat = torch.randint(args.step_num_large, step_num, (1,)).item()
+            if args.step_num_liftpos is not None :
+                if epoch <= args.step_num_liftpos :
+                    z_t_hat = torch.randint(args.step_num_large, step_num, (1,)).item()
+                else :
+                    z_t_hat = torch.randint(args.step_num_small, step_num, (1,)).item() 
             else :
-                z_t_hat = torch.randint(args.step_num_small, step_num, (1,)).item() 
+                z_t_hat = torch.randint(step_low(args.start_epoch, epoch, 
+                                        args.n_epochs, args.step_num_small, 
+                                        args.step_num_large), step_num, (1,)).item() 
+
             z_fake_e = G.few_step_sample_latent(
                 step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
 
@@ -411,3 +417,15 @@ def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, ep
 
 def soft_clamp(x, limit=15.0, temperature=1.0) :
     return limit * torch.tanh(x / (limit * temperature))
+
+def step_low(start_epoch, cur_epoch, total_epoch, step_num_small, step_num_large, power=2.0) :
+    """Progressively lower the z_t_hat lower bound from step_num_large to step_num_small.
+    step_num_large = large lower bound (safe, used at start).
+    step_num_small = small lower bound (aggressive, used at end).
+    power > 1: stays at large longer (conservative); power < 1: drops to small faster."""
+    epoch_train = total_epoch - start_epoch
+    if epoch_train <= 0:
+        return step_num_small
+    progress = min((cur_epoch - start_epoch) / epoch_train, 1.0)
+    result = step_num_large - (step_num_large - step_num_small) * (progress ** power)
+    return max(int(result)+1, step_num_small)
