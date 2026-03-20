@@ -6,3 +6,5 @@ torch
 torchvision
 tqdm
 wandb
+matplotlib
+rdkit

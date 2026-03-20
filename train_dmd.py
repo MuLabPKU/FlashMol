@@ -101,6 +101,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                 z_t_hat = torch.randint(step_low(args.start_epoch, epoch, 
                                         args.n_epochs, args.step_num_small, 
                                         args.step_num_large, args.step_num_pow), step_num, (1,)).item() 
+            
+            if args.t_coupling and z_t_hat <= args.step_num_large - 2 :
+                noise_t[noise_t < args.t_coupling_coeff] = args.t_coupling_coeff
 
             z_fake_e = G.few_step_sample_latent(
                 step_num, bs_data, n_data, node_mask, edge_mask, context, selected_step=z_t_hat)
@@ -173,6 +176,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
         logit_fake = discriminator._forward(node_mask, edge_mask)       # [B]
         L_gan_G = F.softplus(-logit_fake).mean()
+
+        if args.clamp :
+            L_dmd = soft_clamp(L_dmd, 10)
+            L_gan_G = soft_clamp(L_gan_G, 10)
 
         weighting_factor = (z_fake_e - s_real).abs().mean(dim=[0, 1, 2], keepdim=True)
 

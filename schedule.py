@@ -36,15 +36,15 @@ def plot_schedule(ax, start_epoch, total_epoch, step_num_small, step_num_large, 
 configs = [
     dict(start_epoch=25, total_epoch=46, step_num_small=5, step_num_large=8,
          title='start=25, end=46, small=5, large=8'),
-    dict(start_epoch=0,  total_epoch=36, step_num_small=4, step_num_large=10,
-         title='start=0, end=36, small=4, large=10'),
-    dict(start_epoch=20, total_epoch=60, step_num_small=2, step_num_large=8,
-         title='start=20, end=60, small=2, large=8'),
-    dict(start_epoch=0,  total_epoch=26, step_num_small=6, step_num_large=11,
-         title='start=0, end=26, small=6, large=11'),
+    dict(start_epoch=20,  total_epoch=41, step_num_small=3, step_num_large=10,
+         title='start=20, end=41, small=3, large=10'),
+    dict(start_epoch=30, total_epoch=41, step_num_small=2, step_num_large=7,
+         title='start=30, end=41, small=2, large=7'),
+    dict(start_epoch=5,  total_epoch=26, step_num_small=5, step_num_large=11,
+         title='start=5, end=26, small=5, large=11'),
 ]
 
-powers = [0.75, 1.0, 2.0, 3.0, 5.0]
+powers = [0.5, 0.75, 1.0, 2.0, 3.0]
 
 fig, axes = plt.subplots(2, 2, figsize=(14, 9))
 fig.suptitle('step_low schedule — lower bound for z_t_hat sampling', fontsize=13)

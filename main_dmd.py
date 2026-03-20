@@ -114,6 +114,9 @@ parser.add_argument('--step_num_large', type=int, default=2)
 parser.add_argument('--step_num_liftpos', type=int, default=None)
 parser.add_argument('--step_num_pow', type=float, default=0.75)
 parser.add_argument('--gan_pos', type=int, default=7)
+parser.add_argument('--t_coupling', type=bool, default=False)
+parser.add_argument('--t_coupling_coeff', type=float, default=0.5)
+parser.add_argument('--clamp', action='store_true')
 parser.add_argument('--brute_force', type=eval, default=False,
                     help='True | False')
 parser.add_argument('--actnorm', type=eval, default=True,
@@ -231,6 +234,9 @@ if args.resume is not None:
     step_num = args.step_num
     Tminpre = args.Tminpre
     step_num_pow = args.step_num_pow
+    t_coupling = args.t_coupling
+    t_coupling_coeff = args.t_coupling_coeff
+    clamp = args.clamp
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -273,6 +279,9 @@ if args.resume is not None:
     args.step_num = step_num
     args.Tminpre = Tminpre
     args.step_num_pow = step_num_pow
+    args.t_coupling = t_coupling
+    args.t_coupling_coeff = t_coupling_coeff
+    args.clamp = clamp
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:
@@ -503,9 +512,11 @@ def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator, optim_G, 
 def main():
     # ============ LOAD MODEL STATES FROM CHECKPOINT ============
     if args.resume is not None:
+        ep_suffix = f'_{args.start_epoch}' if args.start_epoch > 0 else ''
+
         # --- G ---
-        G_ema_path = join(args.resume, 'G_ema.npy')
-        G_path     = join(args.resume, 'G.npy')
+        G_ema_path = join(args.resume, f'G_ema{ep_suffix}.npy')
+        G_path     = join(args.resume, f'G{ep_suffix}.npy')
         try:
             G.load_state_dict(torch.load(G_ema_path, map_location=device))
             print(f"Loaded G from: {G_ema_path}")
@@ -514,7 +525,7 @@ def main():
             print(f"Loaded G from: {G_path}")
 
         # --- mu_fake ---
-        mu_fake_path = join(args.resume, 'mu_fake.npy')
+        mu_fake_path = join(args.resume, f'mu_fake{ep_suffix}.npy')
         try:
             mu_fake.load_state_dict(torch.load(mu_fake_path, map_location=device))
             print(f"Loaded mu_fake from: {mu_fake_path}")
@@ -522,33 +533,33 @@ def main():
             print(f"WARNING: {mu_fake_path} not found, mu_fake starts from teacher weights")
 
         # --- discriminator ---
-        disc_path = join(args.resume, 'discriminator.npy')
+        disc_path = join(args.resume, f'discriminator{ep_suffix}.npy')
         try:
             discriminator.load_state_dict(torch.load(disc_path, map_location=device))
             print(f"Loaded discriminator from: {disc_path}")
         except FileNotFoundError:
-            print("WARNING: discriminator.npy not found, starting with fresh discriminator weights")
+            print(f"WARNING: discriminator{ep_suffix}.npy not found, starting with fresh discriminator weights")
         # Hooks are not saved in state_dict — must re-register after every load
         discriminator.attach_to(mu_fake)
 
         # --- optimizers ---
         try:
-            optim_G.load_state_dict(torch.load(join(args.resume, 'optim_G.npy'), map_location=device))
+            optim_G.load_state_dict(torch.load(join(args.resume, f'optim_G{ep_suffix}.npy'), map_location=device))
             print("Loaded optim_G state from checkpoint")
         except FileNotFoundError:
-            print("WARNING: optim_G.npy not found, starting with fresh optimizer state")
+            print(f"WARNING: optim_G{ep_suffix}.npy not found, starting with fresh optimizer state")
 
         try:
-            optim_fake.load_state_dict(torch.load(join(args.resume, 'optim_fake.npy'), map_location=device))
+            optim_fake.load_state_dict(torch.load(join(args.resume, f'optim_fake{ep_suffix}.npy'), map_location=device))
             print("Loaded optim_fake state from checkpoint")
         except FileNotFoundError:
-            print("WARNING: optim_fake.npy not found, starting with fresh optimizer state")
+            print(f"WARNING: optim_fake{ep_suffix}.npy not found, starting with fresh optimizer state")
 
         try:
-            optim_d.load_state_dict(torch.load(join(args.resume, 'optim_d.npy'), map_location=device))
+            optim_d.load_state_dict(torch.load(join(args.resume, f'optim_d{ep_suffix}.npy'), map_location=device))
             print("Loaded optim_d state from checkpoint")
         except FileNotFoundError:
-            print("WARNING: optim_d.npy not found, starting with fresh optimizer state")
+            print(f"WARNING: optim_d{ep_suffix}.npy not found, starting with fresh optimizer state")
 
         # Override learning rates from command line (load_state_dict restores old lr)
         for pg in optim_G.param_groups:
@@ -592,10 +603,10 @@ def main():
 
         if args.resume is not None:
             try:
-                G_ema.load_state_dict(torch.load(join(args.resume, 'G_ema.npy'), map_location=device))
-                print("Loaded G_ema state from checkpoint")
+                G_ema.load_state_dict(torch.load(join(args.resume, f'G_ema{ep_suffix}.npy'), map_location=device))
+                print(f"Loaded G_ema state from checkpoint (G_ema{ep_suffix}.npy)")
             except FileNotFoundError:
-                print("WARNING: G_ema.npy not found, initialising EMA from current G weights")
+                print(f"WARNING: G_ema{ep_suffix}.npy not found, initialising EMA from current G weights")
 
         G_ema_dp = torch.nn.DataParallel(G_ema) if args.dp and torch.cuda.device_count() > 1 else G_ema
     else:
