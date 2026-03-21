@@ -1288,20 +1288,43 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         z0 = z0 * node_mask
         return z0
     
-    def few_step_sample_latent(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False, selected_step=-1) :
-        """Multi-step latent generation. If selected_step >= 0, only that step keeps grad (returns single tensor).
-        Otherwise returns a list of detached outputs for all steps."""
+    def few_step_sample_latent(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False, selected_step=None) :
+        """Multi-step latent generation.
+        selected_step: int scalar  → single step, only that step keeps grad, returns [n_samples, n_nodes, nf]
+                       1-D LongTensor of length n_samples → per-sample step, all graphs kept, returns [n_samples, n_nodes, nf]
+                       -1 → all steps detached, returns final z [n_samples, n_nodes, nf]
+        """
         step_schedule = torch.arange(self.T, 0, -(self.T) / step_num)
         z = 0
-        selected_z = None
-        for i, t in enumerate(step_schedule):
+
+        # --- scalar selected_step: memory-efficient path (only one graph kept) ---
+        if isinstance(selected_step, int) and selected_step >= 0:
+            selected_z = None
+            for i, t in enumerate(step_schedule):
+                t = max(0, int(t) - 1)
+                z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
+                if i == selected_step:
+                    selected_z = z  # save before detaching
+                z = z.detach()    # always detach — next step never builds on this graph
+            return selected_z
+
+        # --- per-sample LongTensor: all graphs kept in outs ---
+        if isinstance(selected_step, torch.Tensor):
+            outs = []
+            for i, t in enumerate(step_schedule):
+                t = max(0, int(t) - 1)
+                z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
+                outs.append(z)
+                z = z.detach()
+            outs = torch.stack(outs, dim=1)  # [n_samples, step_num, n_nodes, nf]
+            return outs[torch.arange(n_samples, device=outs.device), selected_step]  # [n_samples, n_nodes, nf]
+
+        # --- default: no selection, return final detached z ---
+        for t in step_schedule:
             t = max(0, int(t) - 1)
             z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
-            if i == selected_step:
-                selected_z = z
-                return selected_z
             z = z.detach()
-        return z  # return final step output when no step is selected
+        return z
     
     @torch.no_grad()
     def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :

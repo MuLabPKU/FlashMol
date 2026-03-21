@@ -100,7 +100,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             else :
                 z_t_hat = torch.randint(step_low(args.start_epoch, epoch, 
                                         args.n_epochs, args.step_num_small, 
-                                        args.step_num_large, args.step_num_pow), step_num, (1,)).item() 
+                                        args.step_num_large, args.step_num_pow), step_num, (bs_data,))
             
             if args.t_coupling and z_t_hat <= args.step_num_large - 1 :
                 noise_t[noise_t < args.t_coupling_coeff] = args.t_coupling_coeff
@@ -144,7 +144,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
             L_fake = L_fake_diffusion + gan_coefff * L_disc
 
-            if torch.isnan(L_fake) or torch.isinf(L_fake):
+            if torch.isnan(L_fake) or torch.isinf(L_fake) or L_fake >= args.skip_bound:
                 print(f'Warning: L_fake is {L_fake.item()}, skipping mu_fake update at iter {i}.')
                 continue
 
@@ -196,11 +196,16 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             min_dist = dists.min()
             print(f"Min pairwise distance: {min_dist:.6f}")
 
-        if torch.isnan(L_G) or torch.isinf(L_G):
-            print(f'Warning: L_G is {L_G.item()}, skipping G update at iter {i}.')
+        if torch.isnan(L_G) or torch.isinf(L_G) or L_dmd.abs() >= args.skip_bound:
+            print(f'Warning: L_G={L_G.item():.4f}, L_dmd={L_dmd.item():.4f}, skipping G update at iter {i}.')
+            optim_G.zero_grad()
+            (0.0 * L_G).backward()  # free graph; zero grad ensures no parameter update
+            continue
         elif any(torch.isnan(p.grad).any() for p in mu_fake.dynamics.parameters() if p.grad is not None):
             print(f"NaN grad detected at iter {i}, skipping mu_fake update")
-            continue  # skip this inner step
+            optim_G.zero_grad()
+            (0.0 * L_G).backward()
+            continue
         else:
             optim_G.zero_grad()
             L_G.backward()
