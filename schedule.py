@@ -38,8 +38,8 @@ configs = [
          title='start=25, end=46, small=5, large=8'),
     dict(start_epoch=20,  total_epoch=41, step_num_small=3, step_num_large=10,
          title='start=20, end=41, small=3, large=10'),
-    dict(start_epoch=30, total_epoch=41, step_num_small=2, step_num_large=7,
-         title='start=30, end=41, small=2, large=7'),
+    dict(start_epoch=15, total_epoch=41, step_num_small=3, step_num_large=10,
+         title='start=15, end=41, small=3, large=10'),
     dict(start_epoch=5,  total_epoch=26, step_num_small=5, step_num_large=11,
          title='start=5, end=26, small=5, large=11'),
 ]

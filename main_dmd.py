@@ -106,6 +106,8 @@ parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--G_lr', type=float, default=2e-4)
 parser.add_argument('--mu_fake_lr', type=float, default=2e-4)
 parser.add_argument('--disc_lr', type=float, default=2e-4)
+parser.add_argument('--fresh_optim', type=eval, default=False,
+                    help='True | False. Skip loading optimizer states on resume.')
 parser.add_argument('--tmin_liftpos', type=int, default=10)
 parser.add_argument('--Tmin', type=float, default=0.2)
 parser.add_argument('--Tminpre', type=float, default=0.8)
@@ -543,32 +545,34 @@ def main():
         discriminator.attach_to(mu_fake)
 
         # --- optimizers ---
-        try:
-            optim_G.load_state_dict(torch.load(join(args.resume, f'optim_G{ep_suffix}.npy'), map_location=device))
-            print("Loaded optim_G state from checkpoint")
-        except FileNotFoundError:
-            print(f"WARNING: optim_G{ep_suffix}.npy not found, starting with fresh optimizer state")
+        if not args.fresh_optim:
+            try:
+                optim_G.load_state_dict(torch.load(join(args.resume, f'optim_G{ep_suffix}.npy'), map_location=device))
+                print("Loaded optim_G state from checkpoint")
+            except FileNotFoundError:
+                print(f"WARNING: optim_G{ep_suffix}.npy not found, starting with fresh optimizer state")
 
-        try:
-            optim_fake.load_state_dict(torch.load(join(args.resume, f'optim_fake{ep_suffix}.npy'), map_location=device))
-            print("Loaded optim_fake state from checkpoint")
-        except FileNotFoundError:
-            print(f"WARNING: optim_fake{ep_suffix}.npy not found, starting with fresh optimizer state")
+            try:
+                optim_fake.load_state_dict(torch.load(join(args.resume, f'optim_fake{ep_suffix}.npy'), map_location=device))
+                print("Loaded optim_fake state from checkpoint")
+            except FileNotFoundError:
+                print(f"WARNING: optim_fake{ep_suffix}.npy not found, starting with fresh optimizer state")
 
-        try:
-            optim_d.load_state_dict(torch.load(join(args.resume, f'optim_d{ep_suffix}.npy'), map_location=device))
-            print("Loaded optim_d state from checkpoint")
-        except FileNotFoundError:
-            print(f"WARNING: optim_d{ep_suffix}.npy not found, starting with fresh optimizer state")
-
-        # Override learning rates from command line (load_state_dict restores old lr)
-        for pg in optim_G.param_groups:
-            pg['lr'] = args.G_lr
-        for pg in optim_fake.param_groups:
-            pg['lr'] = args.mu_fake_lr
-        for pg in optim_d.param_groups:
-            pg['lr'] = args.disc_lr
-        print(f"Overriding lr: G_lr={args.G_lr}, mu_fake_lr={args.mu_fake_lr}, disc_lr={args.disc_lr}")
+            try:
+                optim_d.load_state_dict(torch.load(join(args.resume, f'optim_d{ep_suffix}.npy'), map_location=device))
+                print("Loaded optim_d state from checkpoint")
+            except FileNotFoundError:
+                print(f"WARNING: optim_d{ep_suffix}.npy not found, starting with fresh optimizer state")
+            # Override learning rates from command line (load_state_dict restores old lr)
+            for pg in optim_G.param_groups:
+                pg['lr'] = args.G_lr
+            for pg in optim_fake.param_groups:
+                pg['lr'] = args.mu_fake_lr
+            for pg in optim_d.param_groups:
+                pg['lr'] = args.disc_lr
+            print(f"Overriding lr: G_lr={args.G_lr}, mu_fake_lr={args.mu_fake_lr}, disc_lr={args.disc_lr}")
+        else:
+            print("fresh_optim=True: reinitializing all optimizer states")
 
         print(f"Successfully resumed from epoch {args.start_epoch}")
 

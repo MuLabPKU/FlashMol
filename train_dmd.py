@@ -102,7 +102,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                                         args.n_epochs, args.step_num_small, 
                                         args.step_num_large, args.step_num_pow), step_num, (1,)).item() 
             
-            if args.t_coupling and z_t_hat <= args.step_num_large - 2 :
+            if args.t_coupling and z_t_hat <= args.step_num_large - 1 :
                 noise_t[noise_t < args.t_coupling_coeff] = args.t_coupling_coeff
 
             z_fake_e = G.few_step_sample_latent(
