@@ -168,7 +168,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
         latent_nf = s_fake.shape[-1]
-        d_s = (s_real - s_fake).detach()
+        d_s = (s_fake - s_real).detach() # Note that this is correct according to L_dmd
         L_dmd = (d_s * z_fake_t).sum(dim=[1, 2]).mean() / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
 
         # Latent scale regularization: penalize z_fake_e variance mismatch with real latents
