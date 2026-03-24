@@ -14,56 +14,69 @@ class MolecularDiscriminator(nn.Module):
     attach_to must be re-called after every load_state_dict (hooks are not in state_dict).
     """
 
-    def __init__(self, in_node_nf, n_dims, hidden_nf=64, device='cpu',
-                 act_fn=torch.nn.SiLU(), n_layers=2, attention=False,
-                 normalization_factor=100, aggregation_method='sum'):
+    def __init__(self, in_node_nf, n_dims, r1_weight=None, r1_sigma=None, device='cpu'):
         super().__init__()
         self.mu_fake_out = None          # instance variable — not shared across instances
+        for i in ['2', '5', '7'] :
+            setattr(self, f"mu_fake_out_{i}", None)
+        self.r1_weight = r1_weight
+        self.r1_sigma = r1_sigma
         self.detach_hook = True          # True → detach in mu_fake loop; False → keep grad for G loop
         self.n_dims = n_dims
         self.in_node_nf = in_node_nf
-        self.n_layers = n_layers
         self.device = device
 
-        self.gnn = GNN(in_node_nf, in_edge_nf=1, hidden_nf=hidden_nf,
-                       aggregation_method=aggregation_method, device=device,
-                       act_fn=act_fn, n_layers=n_layers, attention=attention,
-                       normalization_factor=normalization_factor)
-
-        self.mlp = nn.Sequential(
-            nn.Linear(in_node_nf, in_node_nf),
-            act_fn,
-            nn.Linear(in_node_nf, 1))
+        # Cross-attention pooling heads — one per hooked layer
+        self.queries = nn.ParameterList([
+            nn.Parameter(torch.randn(1, 1, in_node_nf) * 0.02)
+            for _ in range(3)
+        ])
+        self.attns = nn.ModuleList([
+            nn.MultiheadAttention(in_node_nf, num_heads=4, batch_first=True)
+            for _ in range(3)
+        ])
+        self.mlps = nn.ModuleList([
+            nn.Sequential(
+                nn.LayerNorm(in_node_nf),
+                nn.Linear(in_node_nf, in_node_nf),
+                nn.SiLU(),
+                nn.Linear(in_node_nf, 1)
+            )
+            for _ in range(3)
+        ])
 
         self.to(device)
 
-    def _forward(self, node_mask, edge_mask):
+    def _forward(self, h1, h2, h3, node_mask, edge_mask):
+        # Assume layer 2, 5, 7 is chosen
         # node_mask: [B, N, 1],  edge_mask: [B, N*N, 1]
         bs, n_nodes, _ = node_mask.shape
         atom_num = node_mask.sum(dim=1, keepdim=True)           # [B, 1, 1]
 
         # mu_fake_out from hook is flat [B*N, in_node_nf] — reshape to [B, N, in_node_nf]
-        h = self.mu_fake_out.view(bs, n_nodes, -1)
+        h1 = h1.view(bs, n_nodes, -1)
+        h2 = h2.view(bs, n_nodes, -1)
+        h3 = h3.view(bs, n_nodes, -1)
+        
+        key_padding_mask = ~node_mask.squeeze(-1).bool()  # [B, N], True = ignore
+        
+        logits = []
 
-        assert h.shape[-1] == self.in_node_nf, (
-            f"mu_fake bottleneck dim {h.shape[-1]} != discriminator in_node_nf {self.in_node_nf}")
+        for h, query, attn, mlp in zip(
+            [h1, h2, h3], self.queries, self.attns, self.mlps
+        ):
+            assert h.shape[-1] == self.in_node_nf, (
+                f"mu_fake bottleneck dim {h.shape[-1]} != discriminator in_node_nf {self.in_node_nf}")
 
-        edges = get_adj_matrix(n_nodes, bs, self.device)
-        edges = [e.to(self.device) for e in edges]
+            q = query.expand(bs, -1, -1)            # [B, 1, in_node_nf]
+            pooled, _ = attn(
+                query=q, key=h, value=h,
+                key_padding_mask=key_padding_mask
+            )                                         # [B, 1, in_node_nf]
+            logits.append(mlp(pooled).squeeze(-1).squeeze(-1))  # [B]
+            
+        logits = torch.stack(logits)
 
-        node_mask_flat = node_mask.view(bs * n_nodes, 1)
-        edge_mask_flat = edge_mask.view(bs * n_nodes * n_nodes, 1)
-
-        h = h.view(bs * n_nodes, -1).clone() * node_mask_flat   # [B*N, in_node_nf]
-
-        h = self.gnn(h, edges, edge_attr=edge_mask_flat,
-                     node_mask=node_mask_flat, edge_mask=edge_mask_flat)
-                                                                 # [B*N, in_node_nf]
-        h = h.view(bs, n_nodes, -1)                             # [B, N, in_node_nf]
-        h = h.sum(dim=1, keepdim=True) / atom_num               # [B, 1, in_node_nf]
-
-        logits = self.mlp(h)                                     # [B, 1, 1]
-        logits = logits.squeeze(-1).squeeze(-1)                  # [B]
         return logits
 
     def attach_to(self, mu_fake: EnVariationalDiffusion, hook_layer='embedding_out'):
@@ -83,14 +96,41 @@ class MolecularDiscriminator(nn.Module):
                     self.mu_fake_out = input[0]
         elif hook_layer.startswith('e_block_'):
             target = getattr(egnn, hook_layer)
+            block_num = hook_layer[-1]
             def _hook(_module, _input, output):
                 # EquivariantBlock.forward returns (h, x); capture h [B*N, hidden_nf]
                 h = output[0]
                 if self.detach_hook:
-                    self.mu_fake_out = h.detach()
+                    setattr(self, f"mu_fake_out_{block_num}", h.detach())
                 else:
-                    self.mu_fake_out = h
+                    setattr(self, f"mu_fake_out_{block_num}", h)
         else:
             raise ValueError(f"Unknown hook_layer '{hook_layer}'. Use 'embedding_out' or 'e_block_N'.")
 
         target.register_forward_hook(_hook)
+
+    def r1_loss(self, real_logits, node_mask, edge_mask) :
+
+        bs_data, n_nodes, _ = node_mask.shape
+
+        fwd_args = []
+
+        for i in ['2', '5', '7'] :
+            h = getattr(self, f"mu_fake_out_{i}")
+            epsilon = self.r1_sigma * torch.randn_like(h) 
+            # Note that the noise needs not be masked 
+            # since padding positions will be ignored in multi-head attention
+            noise_h = h + epsilon
+            fwd_args.append(noise_h)
+        
+        fwd_args.append(node_mask)
+        fwd_args.append(edge_mask)
+
+        logits = self._forward(*fwd_args)
+
+        loss = (real_logits - logits) / self.r1_sigma
+        loss = self.r1_weight * torch.mean(loss ** 2)
+
+        return loss
+
+        

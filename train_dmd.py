@@ -26,7 +26,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
     Tmax = int(0.98 * T)
 
     if epoch <= args.gan_pos :
-        gan_coeffg = 0
+        gan_coefff = 1
 
     G_dp.train()
     G.train()
@@ -120,31 +120,42 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # D is trained to distinguish real from fake mu_fake features.
         # gan_coeff scales L_disc only; no separate mu_fake GAN term.
         # ================================================================
-
-        discriminator.detach_hook = False   # Do not detach hook features during mu_fake/D update
+        if epoch <= args.gan_pos :
+            discriminator.detach_hook = True
+        else :
+            discriminator.detach_hook = False   # Do not detach hook features during mu_fake/D update
         for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
             L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                                    node_mask, edge_mask, context, z_fake_e_d)
 
-            logit_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
+            logit_D_fake = discriminator._forward(discriminator.mu_fake_out_2, 
+                                                  discriminator.mu_fake_out_5,
+                                                  discriminator.mu_fake_out_7,
+                                                  node_mask, edge_mask)     # log D(fake) [B]
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
             x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
             mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
-            logit_D_real = discriminator._forward(node_mask, edge_mask)     # log D(real) [B]
+            logit_D_real = discriminator._forward(discriminator.mu_fake_out_2, 
+                                                  discriminator.mu_fake_out_5,
+                                                  discriminator.mu_fake_out_7,
+                                                  node_mask, edge_mask)     # log D(real) [B]
 
             # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
             L_disc = F.softplus(-logit_D_real).mean() \
                     + F.softplus(logit_D_fake).mean()
+            
+            # R1 loss:
+            l_r1 = discriminator.r1_loss(logit_D_real, node_mask, edge_mask)
             
 
             if args.clamp :
                 L_fake_diffusion = soft_clamp(L_fake_diffusion)
                 L_disc = soft_clamp(L_disc, 5)
 
-            L_fake = L_fake_diffusion + gan_coefff * L_disc
+            L_fake = L_fake_diffusion + gan_coefff * L_disc + l_r1
 
             # if torch.isnan(L_fake) or torch.isinf(L_fake) or L_fake >= args.skip_bound:
             #     print(f'Warning: L_fake is {L_fake.item()}, skipping mu_fake update at iter {i}.')
@@ -155,8 +166,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             L_fake.backward()
             torch.nn.utils.clip_grad_norm_(mu_fake.parameters(), max_norm=1.0)
             torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
-            optim_fake.step()
-            optim_d.step()
+            if epoch <= args.gan_pos :
+                optim_d.step()
+            else :
+                optim_fake.step()
+                optim_d.step()
 
 
         with torch.no_grad():
@@ -176,7 +190,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                  - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
 
         # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
-        logit_fake = discriminator._forward(node_mask, edge_mask)       # [B]
+        logit_fake = discriminator._forward(discriminator.mu_fake_out_2, 
+                                                  discriminator.mu_fake_out_5,
+                                                  discriminator.mu_fake_out_7,
+                                                  node_mask, edge_mask)       # [B]
         L_gan_G = F.softplus(-logit_fake).mean()
 
         if args.clamp :
@@ -212,7 +229,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             optim_G.zero_grad()
             (0.0 * L_G).backward()
             continue
-        else:
+        elif epoch > args.gan_pos:
             optim_G.zero_grad()
             L_G.backward()
             if args.clip_grad:
@@ -222,7 +239,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # ================================================================
         # EMA update on G
         # ================================================================
-        if ema is not None:
+        if ema is not None and epoch > args.gan_pos:
             ema.update_model_average(G_ema, G)
 
         loss_epoch.append(L_G.item())

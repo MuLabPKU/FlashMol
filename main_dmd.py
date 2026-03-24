@@ -79,6 +79,8 @@ parser.add_argument('--gan_coeffg', type=float, default=0)
 parser.add_argument('--gan_coefff', type=float, default=0.02)
 parser.add_argument('--reg_coeff', type=float, default=0)
 parser.add_argument('--consist_coeff', type=float, default=0)
+parser.add_argument('--r1_weight', type=float, default=0)
+parser.add_argument('--r1_sigma', type=float, default=0.01)
 parser.add_argument('--step_ratio', type=int, default=5)
 parser.add_argument('--step_num', type=int, default=10)
 
@@ -116,7 +118,7 @@ parser.add_argument('--step_num_small', type=int, default=4)
 parser.add_argument('--step_num_large', type=int, default=2)
 parser.add_argument('--step_num_liftpos', type=int, default=None)
 parser.add_argument('--step_num_pow', type=float, default=0.75)
-parser.add_argument('--gan_pos', type=int, default=7)
+parser.add_argument('--gan_pos', type=int, default=0) # Gan pos now means when the warm up ends
 parser.add_argument('--t_coupling', type=bool, default=False)
 parser.add_argument('--t_coupling_coeff', type=float, default=0.5)
 parser.add_argument('--clamp', action='store_true')
@@ -242,6 +244,8 @@ if args.resume is not None:
     clamp = args.clamp
     fresh_optim = args.fresh_optim
     consist_coeff = args.consist_coeff
+    r1_weight = args.r1_weight
+    r1_sigma = args.r1_sigma
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -289,6 +293,8 @@ if args.resume is not None:
     args.clamp = clamp
     args.fresh_optim = fresh_optim
     args.consist_coeff = consist_coeff
+    args.r1_weight = r1_weight
+    args.r1_sigma = r1_sigma
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:
@@ -434,8 +440,13 @@ if args.train_diffusion:
         discriminator = MolecularDiscriminator(
             in_node_nf=args.nf,  # must match mu_fake's EGNN hidden_nf
             n_dims=3,
+            r1_weight=args.r1_weight,
+            r1_sigma=args.r1_sigma,
             device=device)
+        
+        discriminator.attach_to(mu_fake, hook_layer='e_block_2')
         discriminator.attach_to(mu_fake, hook_layer='e_block_5')  # hook registration — must redo after resume
+        discriminator.attach_to(mu_fake, hook_layer='e_block_7')
 
     else:
         # Progressive distillation requires a teacher model
@@ -547,7 +558,9 @@ def main():
         except FileNotFoundError:
             print(f"WARNING: discriminator{ep_suffix}.npy not found, starting with fresh discriminator weights")
         # Hooks are not saved in state_dict — must re-register after every load
-        discriminator.attach_to(mu_fake)
+        discriminator.attach_to(mu_fake, hook_layer='e_block_2')
+        discriminator.attach_to(mu_fake, hook_layer='e_block_5')
+        discriminator.attach_to(mu_fake, hook_layer='e_block_7')
 
         # --- optimizers ---
         if not args.fresh_optim:
@@ -604,6 +617,9 @@ def main():
         G_dp = G_dp.cuda()
     else:
         G_dp = G
+
+    discriminator.r1_sigma = args.r1_sigma
+    discriminator.r1_weight = args.r1_weight
 
     # Initialize EMA over G only (mu_fake does not need EMA).
     if args.ema_decay > 0:
