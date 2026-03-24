@@ -1397,6 +1397,29 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         s = - eps_t / (sigma_t + 1e-8)
 
         return s
+    
+    def consistency_loss(self, G_ema, z0, n_samples, n_nodes, node_mask, edge_mask, context, total_t=100) :
+        t = torch.randint(0, total_t - 1, (n_samples, 1), device=z0.device).float()
+        tp = t + 1
+        t = t / total_t
+        tp = tp / total_t
+        gamma_t = self.gamma(t)
+        gamma_tp = self.gamma(tp)
+        alpha_t = self.alpha(gamma_t, target_tensor=z0)
+        alpha_tp = self.alpha(gamma_tp, target_tensor=z0)
+        sigma_t = self.sigma(gamma_t, target_tensor=z0)
+        sigma_tp = self.sigma(gamma_tp, target_tensor=z0)
+
+        epsilon = super().sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
+
+        z_t = epsilon * sigma_t + z0 * alpha_t
+        z_tp = epsilon * sigma_tp + z0 * alpha_tp
+        f0 = G_ema.phi(z_t, t, node_mask, edge_mask, context).detach()
+        f = self.phi(z_tp, tp, node_mask, edge_mask, context)
+        loss = (f - f0) ** 2
+        loss = loss.mean()
+        return loss
+
 
     # DMD requires grad
     def sample_chain(self, n_samples, n_nodes, node_mask, edge_mask, context, keep_frames=None):

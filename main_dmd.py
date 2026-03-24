@@ -78,6 +78,7 @@ parser.add_argument('--trainable_ae', action='store_true',
 parser.add_argument('--gan_coeffg', type=float, default=0)
 parser.add_argument('--gan_coefff', type=float, default=0.02)
 parser.add_argument('--reg_coeff', type=float, default=0)
+parser.add_argument('--consist_coeff', type=float, default=0)
 parser.add_argument('--step_ratio', type=int, default=5)
 parser.add_argument('--step_num', type=int, default=10)
 
@@ -240,6 +241,7 @@ if args.resume is not None:
     t_coupling_coeff = args.t_coupling_coeff
     clamp = args.clamp
     fresh_optim = args.fresh_optim
+    consist_coeff = args.consist_coeff
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -286,6 +288,7 @@ if args.resume is not None:
     args.t_coupling_coeff = t_coupling_coeff
     args.clamp = clamp
     args.fresh_optim = fresh_optim
+    args.consist_coeff = consist_coeff
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:
@@ -637,7 +640,10 @@ def main():
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
                     optim_G=optim_G, optim_fake=optim_fake, optim_d=optim_d, prop_dist=prop_dist,
-                    gan_coefff=args.gan_coefff, gan_coeffg=args.gan_coeffg, reg_coeff=args.reg_coeff, step_ratio=args.step_ratio, step_num=args.step_num)
+                    gan_coefff=args.gan_coefff, gan_coeffg=args.gan_coeffg, reg_coeff=args.reg_coeff, 
+                    step_ratio=args.step_ratio, step_num=args.step_num,
+                    consist_coeff=args.consist_coeff
+                    )
 
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 
