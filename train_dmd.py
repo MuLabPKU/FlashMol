@@ -252,6 +252,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
                   f"L_gan_G: {L_gan_G.item():.4f}, L_reg: {L_reg.item():.4f}, "
+                  f"L_consist: {L_consist.item():.4f}, L_r1: {l_r1.item():.4f}, "
                   f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, L_disc: {L_disc.item():.4f}, "
                   f"D_acc: {acc_d:.2f} (real:{acc_real:.2f}/fake:{acc_fake:.2f})")
 
