@@ -34,12 +34,12 @@ def plot_schedule(ax, start_epoch, total_epoch, step_num_small, step_num_large, 
 
 # ── Configurations ────────────────────────────────────────────────────────────
 configs = [
-    dict(start_epoch=25, total_epoch=46, step_num_small=5, step_num_large=8,
-         title='start=25, end=46, small=5, large=8'),
-    dict(start_epoch=20,  total_epoch=41, step_num_small=3, step_num_large=10,
+    dict(start_epoch=20, total_epoch=41, step_num_small=3, step_num_large=10,
          title='start=20, end=41, small=3, large=10'),
-    dict(start_epoch=15, total_epoch=41, step_num_small=3, step_num_large=10,
-         title='start=15, end=41, small=3, large=10'),
+    dict(start_epoch=15,  total_epoch=146, step_num_small=0, step_num_large=8,
+         title='start=15, end=146, small=0, large=8'),
+    dict(start_epoch=15, total_epoch=116, step_num_small=0, step_num_large=5,
+         title='start=15, end=116, small=0, large=5'),
     dict(start_epoch=5,  total_epoch=26, step_num_small=5, step_num_large=11,
          title='start=5, end=26, small=5, large=11'),
 ]

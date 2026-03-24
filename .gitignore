@@ -37,3 +37,5 @@ outputs2/
 PD_script/
 .claude/
 finals/
+scheduler.py
+scheduler.png

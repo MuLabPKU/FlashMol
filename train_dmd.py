@@ -100,7 +100,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             else :
                 z_t_hat = torch.randint(step_low(args.start_epoch, epoch, 
                                         args.n_epochs, args.step_num_small, 
-                                        args.step_num_large, args.step_num_pow), step_num, (bs_data,))
+                                        args.step_num_large, args.step_num_pow), step_num, (1,)).item()
             
             if args.t_coupling and z_t_hat <= args.step_num_large - 1 :
                 noise_t[noise_t < args.t_coupling_coeff] = args.t_coupling_coeff
@@ -127,7 +127,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
             L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                                    node_mask, edge_mask, context, z_fake_e_d)
-            L_fake_diffusion = soft_clamp(L_fake_diffusion)
+
             logit_D_fake = discriminator._forward(node_mask, edge_mask)     # log D(fake) [B]
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
@@ -139,14 +139,16 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             L_disc = F.softplus(-logit_D_real).mean() \
                     + F.softplus(logit_D_fake).mean()
             
-            L_disc = soft_clamp(L_disc, 5)
-            L_fake_diffusion = soft_clamp(L_fake_diffusion, 5)
+
+            if args.clamp :
+                L_fake_diffusion = soft_clamp(L_fake_diffusion)
+                L_disc = soft_clamp(L_disc, 5)
 
             L_fake = L_fake_diffusion + gan_coefff * L_disc
 
-            if torch.isnan(L_fake) or torch.isinf(L_fake) or L_fake >= args.skip_bound:
-                print(f'Warning: L_fake is {L_fake.item()}, skipping mu_fake update at iter {i}.')
-                continue
+            # if torch.isnan(L_fake) or torch.isinf(L_fake) or L_fake >= args.skip_bound:
+            #     print(f'Warning: L_fake is {L_fake.item()}, skipping mu_fake update at iter {i}.')
+            #     continue
 
             optim_fake.zero_grad()
             optim_d.zero_grad()
