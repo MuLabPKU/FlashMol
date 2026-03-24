@@ -119,7 +119,6 @@ parser.add_argument('--gan_pos', type=int, default=7)
 parser.add_argument('--t_coupling', type=bool, default=False)
 parser.add_argument('--t_coupling_coeff', type=float, default=0.5)
 parser.add_argument('--clamp', action='store_true')
-parser.add_argument('--skip_bound', type=float, default=10)
 parser.add_argument('--brute_force', type=eval, default=False,
                     help='True | False')
 parser.add_argument('--actnorm', type=eval, default=True,
@@ -241,7 +240,6 @@ if args.resume is not None:
     t_coupling_coeff = args.t_coupling_coeff
     clamp = args.clamp
     fresh_optim = args.fresh_optim
-    skip_bound = args.skip_bound
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -288,7 +286,6 @@ if args.resume is not None:
     args.t_coupling_coeff = t_coupling_coeff
     args.clamp = clamp
     args.fresh_optim = fresh_optim
-    args.skip_bound = skip_bound
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:
