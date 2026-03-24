@@ -624,11 +624,17 @@ def main():
     # Initialize EMA over G only (mu_fake does not need EMA).
     if args.ema_decay > 0:
         G_ema = copy.deepcopy(G)
+        G_ema.eval()
+        for p in G_ema.parameters():
+            p.requires_grad_(False)
         ema   = flow_utils.EMA(args.ema_decay)
 
         if args.resume is not None:
             try:
                 G_ema.load_state_dict(torch.load(join(args.resume, f'G_ema{ep_suffix}.npy'), map_location=device))
+                G_ema.eval()
+                for p in G_ema.parameters():
+                    p.requires_grad_(False)
                 print(f"Loaded G_ema state from checkpoint (G_ema{ep_suffix}.npy)")
             except FileNotFoundError:
                 print(f"WARNING: G_ema{ep_suffix}.npy not found, initialising EMA from current G weights")
