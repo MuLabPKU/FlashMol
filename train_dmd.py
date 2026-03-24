@@ -198,7 +198,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             min_dist = dists.min()
             print(f"Min pairwise distance: {min_dist:.6f}")
 
-        if torch.isnan(L_G) or torch.isinf(L_G) or L_dmd.abs() >= args.skip_bound:
+        if torch.isnan(L_G) or torch.isinf(L_G):
             print(f'Warning: L_G={L_G.item():.4f}, L_dmd={L_dmd.item():.4f}, skipping G update at iter {i}.')
             optim_G.zero_grad()
             (0.0 * L_G).backward()  # free graph; zero grad ensures no parameter update
