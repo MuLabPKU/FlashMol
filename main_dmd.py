@@ -83,6 +83,8 @@ parser.add_argument('--r1_weight', type=float, default=0)
 parser.add_argument('--r1_sigma', type=float, default=0.01)
 parser.add_argument('--step_ratio', type=int, default=5)
 parser.add_argument('--step_num', type=int, default=10)
+parser.add_argument('--log_grad_norm', action='store_true',
+                    help='Log per-loss gradient norms every 50 iterations')
 
 # VAE args
 parser.add_argument('--latent_nf', type=int, default=4,
@@ -246,6 +248,7 @@ if args.resume is not None:
     consist_coeff = args.consist_coeff
     r1_weight = args.r1_weight
     r1_sigma = args.r1_sigma
+    log_grad_norm = args.log_grad_norm
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -295,6 +298,7 @@ if args.resume is not None:
     args.consist_coeff = consist_coeff
     args.r1_weight = r1_weight
     args.r1_sigma = r1_sigma
+    args.log_grad_norm = log_grad_norm
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:

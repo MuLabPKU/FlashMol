@@ -13,6 +13,16 @@ import torch.nn.functional as F
 from equivariant_diffusion import utils as diffusion_utils
 
 
+def grad_norm(loss, params, retain_graph=True):
+    """Compute ||∇_params loss||₂ without updating params."""
+    grads = torch.autograd.grad(loss, params, retain_graph=retain_graph, allow_unused=True)
+    total = 0.0
+    for g in grads:
+        if g is not None:
+            total += g.norm().item() ** 2
+    return total ** 0.5
+
+
 def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discriminator,
                 ema, device, dtype, property_norms, nodes_dist, gradnorm_queue,
                 dataset_info, prop_dist, optim_G, optim_fake, optim_d, gan_coeffg, gan_coefff,
@@ -161,6 +171,23 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             #     print(f'Warning: L_fake is {L_fake.item()}, skipping mu_fake update at iter {i}.')
             #     continue
 
+            if args.log_grad_norm and i % 50 == 0:
+                params_fake = list(mu_fake.dynamics.parameters())
+                params_d = list(discriminator.parameters())
+                gn_fake_diff = grad_norm(L_fake_diffusion, params_fake)
+                gn_disc_fake = grad_norm(gan_coefff * L_disc, params_fake)
+                gn_disc_d = grad_norm(gan_coefff * L_disc, params_d)
+                gn_r1 = grad_norm(l_r1, params_d)
+                wandb.log({
+                    "grad_norm/L_fake_diffusion": gn_fake_diff,
+                    "grad_norm/L_disc_on_fake": gn_disc_fake,
+                    "grad_norm/L_disc_on_d": gn_disc_d,
+                    "grad_norm/L_r1": gn_r1,
+                }, commit=False)
+                print(f"  [D/mu_fake grad_norm] L_fake_diff: {gn_fake_diff:.4f}, "
+                      f"L_disc_on_fake: {gn_disc_fake:.4f}, L_disc_on_d: {gn_disc_d:.4f}, "
+                      f"L_r1: {gn_r1:.4f}")
+
             optim_fake.zero_grad()
             optim_d.zero_grad()
             L_fake.backward()
@@ -230,6 +257,21 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             (0.0 * L_G).backward()
             continue
         elif epoch > args.gan_pos:
+            if args.log_grad_norm and i % 50 == 0:
+                params_G = list(G.dynamics.parameters())
+                params_d_g = list(discriminator.parameters())
+                gn_dmd = grad_norm(L_dmd, params_G)
+                gn_gan_g = grad_norm(gan_coeffg * L_gan_G, params_G)
+                gn_reg = grad_norm(reg_coeff * L_reg, params_G)
+                gn_consist = grad_norm(consist_coeff * L_consist, params_G)
+                wandb.log({
+                    "grad_norm/L_dmd": gn_dmd,
+                    "grad_norm/L_gan_G": gn_gan_g,
+                    "grad_norm/L_reg": gn_reg,
+                    "grad_norm/L_consist": gn_consist,
+                }, commit=False)
+                print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_gan_G: {gn_gan_g:.4f}, "
+                      f"L_reg: {gn_reg:.4f}, L_consist: {gn_consist:.4f}")
             optim_G.zero_grad()
             L_G.backward()
             if args.clip_grad:
@@ -255,6 +297,17 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                   f"L_consist: {L_consist.item():.4f}, L_r1: {l_r1.item():.4f}, "
                   f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, L_disc: {L_disc.item():.4f}, "
                   f"D_acc: {acc_d:.2f} (real:{acc_real:.2f}/fake:{acc_fake:.2f})")
+            wandb.log({
+                "loss/L_consist": L_consist.item(),
+                "loss/L_r1": l_r1.item(),
+                "loss/L_G": L_G.item(),
+                "loss/L_dmd": L_dmd.item(),
+                "loss/L_gan_G": L_gan_G.item(),
+                "loss/L_reg": L_reg.item(),
+                "loss/L_fake_diffusion": L_fake_diffusion.item(),
+                "loss/L_disc": L_disc.item(),
+                "loss/D_acc": acc_d,
+            }, commit=False)
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
                 and not (epoch == 0 and i == 0) and args.train_diffusion:
