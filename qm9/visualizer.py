@@ -357,9 +357,7 @@ def visualize_chain_uncertainty(
     files = sorted(files)
     save_paths = []
 
-    for i in range(len(files)):
-        if i + 2 == len(files):
-            break
+    for i in range(len(files) - 2):
 
         file = files[i]
         file2 = files[i+1]

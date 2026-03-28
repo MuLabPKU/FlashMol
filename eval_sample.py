@@ -132,10 +132,14 @@ def save_and_sample_fixed_noise(args, eval_args, device, generative_model,
     With fixed noise, each molecule in the batch shares the same initial noise,
     so variation comes only from the node count — useful for visual comparison.
     """
+    # DMD generates in one step (no iterative denoising chain), so we
+    # produce multiple samples per chain to give visualize_chain_uncertainty
+    # enough files (it needs ≥ 3 for its sliding-window of 3).
+    n_samples_per_chain = 10
     for i in range(num_chains):
         target_path = f'eval/chain_{i}/'
 
-        nodesxsample = nodes_dist.sample(1)
+        nodesxsample = nodes_dist.sample(1).repeat(n_samples_per_chain)
         one_hot, charges, x, node_mask = sample_one_step(
             args, device, generative_model, dataset_info,
             prop_dist=prop_dist, nodesxsample=nodesxsample,
