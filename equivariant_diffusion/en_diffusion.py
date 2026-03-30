@@ -1294,13 +1294,14 @@ class EnLatentDiffusion(EnVariationalDiffusion):
                        1-D LongTensor of length n_samples → per-sample step, all graphs kept, returns [n_samples, n_nodes, nf]
                        -1 → all steps detached, returns final z [n_samples, n_nodes, nf]
         """
-        step_schedule = torch.arange(self.T, 0, -(self.T) / step_num)
+        step_schedule = torch.arange(self.T, 0, -1)
         z = 0
 
         # --- scalar selected_step: memory-efficient path (only one graph kept) ---
         if isinstance(selected_step, int) and selected_step >= 0:
             selected_z = None
             for i, t in enumerate(step_schedule):
+                t = self.t_compute(t, step_num) * self.T
                 t = max(0, int(t) - 1)
                 z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
                 if i == selected_step:
@@ -1328,9 +1329,10 @@ class EnLatentDiffusion(EnVariationalDiffusion):
     
     @torch.no_grad()
     def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
-        step_schedule = torch.arange(self.T, 0.0, - (self.T) / step_num)
+        step_schedule = torch.arange(self.T, 0.0, -1)
         z = 0
         for t in step_schedule:
+            t = self.t_compute(t, step_num).item() * self.T
             t = max(0, int(t) - 1)
             z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z, fix_noise)
         
@@ -1345,6 +1347,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
 
     
     def corrupt(self, t, original, n_samples, n_nodes, node_mask, edge_mask, context) :
+        t = self.t_compute(t * self.T, self.T)
         t0 = torch.zeros(n_samples, 1, device=original.device)
         gamma_t = self.gamma(t)
         alpha_t = self.alpha(gamma_t, target_tensor=original)
@@ -1369,6 +1372,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
             (s, mu)                    if z0 is None
             (s, mu, diffusion_loss)    if z0 is provided
         """
+        t = self.t_compute(t * self.T, self.T)
         t0 = torch.zeros(n_samples, 1, device=x_t.device)
         gamma_0 = self.gamma(t0)
         gamma_t = self.gamma(t)
@@ -1400,6 +1404,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
     
     def consistency_loss(self, G_ema, z0, n_samples, n_nodes, node_mask, edge_mask, context, total_t=100) :
         t = torch.randint(0, total_t - 1, (n_samples, 1), device=z0.device).float()
+        t = self.t_compute(t, total_t)
         tp = t + 1
         t = t / total_t
         tp = tp / total_t
@@ -1459,3 +1464,9 @@ class EnLatentDiffusion(EnVariationalDiffusion):
             self.vae = vae.train()
             for param in self.vae.parameters():
                 param.requires_grad = True
+
+    def t_compute(self, t, step_num, s=1e-4, rho=2.25) :
+        t = torch.sqrt(1 + s - torch.sqrt((1 - (t / (step_num + 1)) ** (2 * rho) - s) / (1 - 2 * s)))
+        # Note that an additional s is added to avoid NaN
+        return t
+
