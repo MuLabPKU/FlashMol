@@ -1294,7 +1294,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
                        1-D LongTensor of length n_samples → per-sample step, all graphs kept, returns [n_samples, n_nodes, nf]
                        -1 → all steps detached, returns final z [n_samples, n_nodes, nf]
         """
-        step_schedule = torch.arange(self.T, 0, -1)
+        step_schedule = torch.arange(step_num, 0, -1)
         z = 0
 
         # --- scalar selected_step: memory-efficient path (only one graph kept) ---
@@ -1329,7 +1329,7 @@ class EnLatentDiffusion(EnVariationalDiffusion):
     
     @torch.no_grad()
     def few_step_sample(self, step_num, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False) :
-        step_schedule = torch.arange(self.T, 0.0, -1)
+        step_schedule = torch.arange(step_num, 0.0, -1)
         z = 0
         for t in step_schedule:
             t = self.t_compute(t, step_num).item() * self.T
