@@ -34,17 +34,17 @@ def plot_schedule(ax, start_epoch, total_epoch, step_num_small, step_num_large, 
 
 # ── Configurations ────────────────────────────────────────────────────────────
 configs = [
-    dict(start_epoch=0, total_epoch=56, step_num_small=0, step_num_large=6,
-         title='start=0, end=56, small=0, large=6'),
-    dict(start_epoch=0,  total_epoch=146, step_num_small=0, step_num_large=8,
-         title='start=0, end=146, small=0, large=8'),
+    dict(start_epoch=0, total_epoch=56, step_num_small=0, step_num_large=1,
+         title='start=0, end=56, small=0, large=1'),
+    dict(start_epoch=0,  total_epoch=146, step_num_small=0, step_num_large=4,
+         title='start=0, end=146, small=0, large=4'),
     dict(start_epoch=0, total_epoch=106, step_num_small=0, step_num_large=8,
          title='start=0, end=106, small=0, large=8'),
-    dict(start_epoch=5,  total_epoch=26, step_num_small=5, step_num_large=11,
-         title='start=5, end=26, small=5, large=11'),
+    dict(start_epoch=0,  total_epoch=26, step_num_small=3, step_num_large=3,
+         title='start=0, end=26, small=3, large=3'),
 ]
 
-powers = [0.5, 0.75, 1.0, 1.5, 2.0]
+powers = [0, 0.5, 0.75, 1.0, 1.5, 2.0]
 
 fig, axes = plt.subplots(2, 2, figsize=(14, 9))
 fig.suptitle('step_low schedule — lower bound for z_t_hat sampling', fontsize=13)
