@@ -20,8 +20,6 @@ import pickle
 
 from qm9.utils import prepare_context, compute_mean_mad
 from train_dmd import train_epoch, test, analyze_and_save
-from dmd.discriminator import MolecularDiscriminator
-
 
 parser = argparse.ArgumentParser(description='DMDMolGen_GEOM')
 parser.add_argument('--exp_name', type=str, default='debug_10')
@@ -456,18 +454,16 @@ def check_mask_correct(variables, node_mask):
             assert_correctly_masked(variable, node_mask)
 
 
-def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator, optim_G, optim_fake, optim_d, suffix=''):
+def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, optim_G, optim_fake, suffix=''):
     """Save all DMD model states. suffix='' for best, suffix='_N' for periodic."""
     out = 'outputs/%s' % args.exp_name
     args.current_epoch = epoch + 1
-    utils.save_model(G,             f'{out}/G{suffix}.npy')
-    utils.save_model(mu_fake,       f'{out}/mu_fake{suffix}.npy')
-    utils.save_model(discriminator, f'{out}/discriminator{suffix}.npy')
-    utils.save_model(optim_G,       f'{out}/optim_G{suffix}.npy')
-    utils.save_model(optim_fake,    f'{out}/optim_fake{suffix}.npy')
-    utils.save_model(optim_d,       f'{out}/optim_d{suffix}.npy')
+    utils.save_model(G,          f'{out}/G{suffix}.npy')
+    utils.save_model(mu_fake,    f'{out}/mu_fake{suffix}.npy')
+    utils.save_model(optim_G,    f'{out}/optim_G{suffix}.npy')
+    utils.save_model(optim_fake, f'{out}/optim_fake{suffix}.npy')
     if G_ema is not None:
-        utils.save_model(G_ema,     f'{out}/G_ema{suffix}.npy')
+        utils.save_model(G_ema,  f'{out}/G_ema{suffix}.npy')
     with open(f'{out}/args{suffix}.pickle', 'wb') as f:
         pickle.dump(args, f)
 
@@ -581,15 +577,14 @@ def main():
         start_epoch = time.time()
         train_epoch(args=args, loader=dataloaders['train'], epoch=epoch,
                     mu_real=mu_real, G=G, G_ema=G_ema, G_dp=G_dp,
-                    mu_fake=mu_fake, discriminator=None,
+                    mu_fake=mu_fake,
                     ema=ema, device=device, dtype=dtype,
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
-                    optim_G=optim_G, optim_fake=optim_fake, optim_d=None,
+                    optim_G=optim_G, optim_fake=optim_fake,
                     prop_dist=prop_dist,
-                    gan_coefff=args.gan_coefff, gan_coeffg=args.gan_coeffg,
                     reg_coeff=args.reg_coeff, step_ratio=args.step_ratio,
-                    step_num=args.step_num, consist_coeff=args.consist_coeff)
+                    step_num=args.step_num)
 
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 

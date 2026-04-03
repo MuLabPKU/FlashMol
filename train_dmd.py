@@ -23,10 +23,10 @@ def grad_norm(loss, params, retain_graph=True):
     return total ** 0.5
 
 
-def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discriminator,
+def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
                 ema, device, dtype, property_norms, nodes_dist, gradnorm_queue,
-                dataset_info, prop_dist, optim_G, optim_fake, optim_d, gan_coeffg, gan_coefff,
-                reg_coeff, step_ratio, step_num, consist_coeff):
+                dataset_info, prop_dist, optim_G, optim_fake,
+                reg_coeff, step_ratio, step_num):
 
     T = mu_real.T
     if epoch <= args.tmin_liftpos :
@@ -34,9 +34,6 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
     else :
         Tmin = max(1, int(args.Tmin * T))
     Tmax = int(0.98 * T)
-
-    if epoch <= args.gan_pos :
-        gan_coefff = 1
 
     G_dp.train()
     G.train()
@@ -95,7 +92,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # GENERATOR UPDATE
         # 1. Sample z_fake from G (gradient flows back through here).
         # 2. Encode to latent, corrupt, compute scores.
-        # 3. DMD loss + GAN generator loss → update G.
+        # 3. DMD loss → update G.
         # ================================================================
         if step_num == 1 :
             z_fake_e = G.one_step_sample_latent(bs_data, n_data, node_mask, edge_mask, context)
@@ -125,66 +122,31 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         x_e_d      = x_e.detach()
 
         # ================================================================
-        # MU_FAKE + DISCRIMINATOR UPDATE  (step_ratio inner steps per 1 G step)
+        # MU_FAKE UPDATE  (step_ratio inner steps per 1 G step)
         # mu_fake is trained to denoise fake samples (diffusion loss).
-        # D is trained to distinguish real from fake mu_fake features.
-        # gan_coeff scales L_disc only; no separate mu_fake GAN term.
         # ================================================================
 
         for _ in range(step_ratio):
-            # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
-            # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
             L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
-                                                   node_mask, edge_mask, context, z_fake_e_d)
+                                             node_mask, edge_mask, context, z_fake_e_d)
 
-            logit_D_fake = 0
-
-            # mu_fake forward on real x_t → hook captures real bottleneck features
-            x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
-            mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
-            logit_D_real = 0
-            # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
-            L_disc = 0
-            
-            # R1 loss:
-            l_r1 = 0
-
-            if args.clamp :
+            if args.clamp:
                 L_fake_diffusion = soft_clamp(L_fake_diffusion)
-                L_disc = soft_clamp(L_disc, 5)
-
-            L_fake = L_fake_diffusion + gan_coefff * L_disc + l_r1
-
-            # if torch.isnan(L_fake) or torch.isinf(L_fake) or L_fake >= args.skip_bound:
-            #     print(f'Warning: L_fake is {L_fake.item()}, skipping mu_fake update at iter {i}.')
-            #     continue
 
             if args.log_grad_norm and i % 50 == 0:
                 params_fake = list(mu_fake.dynamics.parameters())
                 gn_fake_diff = grad_norm(L_fake_diffusion, params_fake)
-                gn_disc_fake = grad_norm(gan_coefff * L_disc, params_fake)
-                wandb.log({
-                    "grad_norm/L_fake_diffusion": gn_fake_diff,
-                    "grad_norm/L_disc_on_fake": gn_disc_fake,
-                }, commit=False)
-                print(f"  [D/mu_fake grad_norm] L_fake_diff: {gn_fake_diff:.4f}, "
-                      f"L_disc_on_fake: {gn_disc_fake:.4f}")
+                wandb.log({"grad_norm/L_fake_diffusion": gn_fake_diff}, commit=False)
+                print(f"  [mu_fake grad_norm] L_fake_diff: {gn_fake_diff:.4f}")
 
             optim_fake.zero_grad()
-            optim_d.zero_grad()
-            L_fake.backward()
+            L_fake_diffusion.backward()
             torch.nn.utils.clip_grad_norm_(mu_fake.parameters(), max_norm=1.0)
-            if epoch <= args.gan_pos :
-                optim_d.step()
-            else :
-                optim_fake.step()
-                optim_d.step()
+            optim_fake.step()
 
 
         with torch.no_grad():
             s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
-        # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
-        # Keep hook features on graph so L_gan_G gradient flows back to G.
         s_fake = mu_fake.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
@@ -196,21 +158,12 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
                  - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
 
-        # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
-        logit_fake = 0   # [B]
-        L_gan_G = 0
-
-        if args.clamp :
+        if args.clamp:
             L_dmd = soft_clamp(L_dmd, 10)
-            L_gan_G = soft_clamp(L_gan_G, 10)
 
         weighting_factor = (z_fake_e - s_real).abs().mean(dim=[0, 1, 2], keepdim=True)
 
-        # Consistency loss
-
-        L_consist = 0
-
-        L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + consist_coeff * L_consist
+        L_G = L_dmd + reg_coeff * L_reg
         L_G = L_G / weighting_factor
 
         if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
@@ -233,21 +186,16 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             optim_G.zero_grad()
             (0.0 * L_G).backward()
             continue
-        elif epoch > args.gan_pos:
+        else:
             if args.log_grad_norm and i % 50 == 0:
                 params_G = list(G.dynamics.parameters())
                 gn_dmd = grad_norm(L_dmd, params_G)
-                gn_gan_g = grad_norm(gan_coeffg * L_gan_G, params_G)
                 gn_reg = grad_norm(reg_coeff * L_reg, params_G)
-                gn_consist = grad_norm(consist_coeff * L_consist, params_G)
                 wandb.log({
                     "grad_norm/L_dmd": gn_dmd,
-                    "grad_norm/L_gan_G": gn_gan_g,
                     "grad_norm/L_reg": gn_reg,
-                    "grad_norm/L_consist": gn_consist,
                 }, commit=False)
-                print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_gan_G: {gn_gan_g:.4f}, "
-                      f"L_reg: {gn_reg:.4f}, L_consist: {gn_consist:.4f}")
+                print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_reg: {gn_reg:.4f}")
             optim_G.zero_grad()
             L_G.backward()
             if args.clip_grad:
@@ -257,32 +205,21 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # ================================================================
         # EMA update on G
         # ================================================================
-        if ema is not None and epoch > args.gan_pos:
+        if ema is not None:
             ema.update_model_average(G_ema, G)
 
         loss_epoch.append(L_G.item())
 
         if i % args.n_report_steps == 0:
-            with torch.no_grad():
-                acc_real = (logit_D_real > 0).float().mean().item()
-                acc_fake = (logit_D_fake < 0).float().mean().item()
-                acc_d = (acc_real + acc_fake) / 2
             print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
-                  f"L_gan_G: {L_gan_G.item():.4f}, L_reg: {L_reg.item():.4f}, "
-                  f"L_consist: {L_consist.item():.4f}, L_r1: {l_r1.item():.4f}, "
-                  f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, L_disc: {L_disc.item():.4f}, "
-                  f"D_acc: {acc_d:.2f} (real:{acc_real:.2f}/fake:{acc_fake:.2f})")
+                  f"L_reg: {L_reg.item():.4f}, "
+                  f"L_fake_diffusion: {L_fake_diffusion.item():.4f}")
             wandb.log({
-                "loss/L_consist": L_consist.item(),
-                "loss/L_r1": l_r1.item(),
                 "loss/L_G": L_G.item(),
                 "loss/L_dmd": L_dmd.item(),
-                "loss/L_gan_G": L_gan_G.item(),
                 "loss/L_reg": L_reg.item(),
                 "loss/L_fake_diffusion": L_fake_diffusion.item(),
-                "loss/L_disc": L_disc.item(),
-                "loss/D_acc": acc_d,
             }, commit=False)
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
