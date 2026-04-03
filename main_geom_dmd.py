@@ -538,8 +538,14 @@ def main():
         print(f'Training using {torch.cuda.device_count()} GPUs')
         G_dp = torch.nn.DataParallel(G.cpu())
         G_dp = G_dp.cuda()
+        mu_real_dp = torch.nn.DataParallel(mu_real.cpu())
+        mu_real_dp = mu_real_dp.cuda()
+        mu_fake_dp = torch.nn.DataParallel(mu_fake.cpu())
+        mu_fake_dp = mu_fake_dp.cuda()
     else:
         G_dp = G
+        mu_real_dp = mu_real
+        mu_fake_dp = mu_fake
 
     # Initialize EMA over G only (mu_fake does not need EMA).
     if args.ema_decay > 0:
@@ -576,8 +582,8 @@ def main():
     for epoch in range(args.start_epoch, args.n_epochs):
         start_epoch = time.time()
         train_epoch(args=args, loader=dataloaders['train'], epoch=epoch,
-                    mu_real=mu_real, G=G, G_ema=G_ema, G_dp=G_dp,
-                    mu_fake=mu_fake,
+                    mu_real=mu_real_dp, G=G, G_ema=G_ema, G_dp=G_dp,
+                    mu_fake=mu_fake_dp,
                     ema=ema, device=device, dtype=dtype,
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
