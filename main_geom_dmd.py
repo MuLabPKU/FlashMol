@@ -432,9 +432,7 @@ if args.train_diffusion:
             r1_sigma=args.r1_sigma,
             device=device)
 
-        discriminator.attach_to(mu_fake, hook_layer='e_block_2')
-        discriminator.attach_to(mu_fake, hook_layer='e_block_5')  # hook registration — must redo after resume
-        discriminator.attach_to(mu_fake, hook_layer='e_block_7')
+        discriminator.attach_to(mu_fake, hook_layer='e_block_0')
 
     else:
         # Progressive distillation requires a teacher model
