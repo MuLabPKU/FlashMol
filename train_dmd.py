@@ -10,7 +10,19 @@ import qm9.utils as qm9utils
 import time
 import torch
 import torch.nn.functional as F
+import torch.distributed as dist
 from equivariant_diffusion import utils as diffusion_utils
+
+
+def sync_gradients(model):
+    """All-reduce parameter gradients across DDP ranks (no-op if not distributed)."""
+    if not dist.is_available() or not dist.is_initialized() or dist.get_world_size() == 1:
+        return
+    world_size = dist.get_world_size()
+    for param in model.parameters():
+        if param.grad is not None:
+            dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
+            param.grad.data /= world_size
 
 
 def grad_norm(loss, params, retain_graph=True):
@@ -141,6 +153,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
 
             optim_fake.zero_grad()
             L_fake_diffusion.backward()
+            sync_gradients(mu_fake)
             torch.nn.utils.clip_grad_norm_(mu_fake.parameters(), max_norm=1.0)
             optim_fake.step()
 
@@ -198,6 +211,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
                 print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_reg: {gn_reg:.4f}")
             optim_G.zero_grad()
             L_G.backward()
+            sync_gradients(G)
             if args.clip_grad:
                 utils.gradient_clipping(G, gradnorm_queue)
             optim_G.step()

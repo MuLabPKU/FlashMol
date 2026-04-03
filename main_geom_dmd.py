@@ -17,6 +17,9 @@ from equivariant_diffusion import utils as diffusion_utils
 import torch
 import time
 import pickle
+import os
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 
 from qm9.utils import prepare_context, compute_mean_mad
 from train_dmd import train_epoch, test, analyze_and_save
@@ -169,6 +172,13 @@ parser.add_argument('--sequential', action='store_true',
                     help='Organize data by size to reduce average memory usage.')
 args = parser.parse_args()
 
+local_rank = int(os.environ.get('LOCAL_RANK', 0))
+world_size  = int(os.environ.get('WORLD_SIZE', 1))
+is_ddp = world_size > 1
+if is_ddp:
+    dist.init_process_group(backend='nccl')
+    torch.cuda.set_device(local_rank)
+
 data_file = './data/geom/geom_drugs_30.npy'
 
 if args.remove_h:
@@ -177,20 +187,25 @@ else:
     dataset_info = geom_with_h
 
 args.cuda = not args.no_cuda and torch.cuda.is_available()
-device = torch.device("cuda" if args.cuda else "cpu")
+device = torch.device(f'cuda:{local_rank}' if args.cuda else 'cpu')
 dtype = torch.float32
 
 split_data = build_geom_dataset.load_split_data(data_file, val_proportion=0.1, test_proportion=0.1, filter_size=args.filter_molecule_size)
 transform = build_geom_dataset.GeomDrugsTransform(dataset_info, args.include_charges, device, args.sequential)
 dataloaders = {}
+train_sampler = None
 for key, data_list in zip(['train', 'val', 'test'], split_data):
     dataset = build_geom_dataset.GeomDrugsDataset(data_list, transform=transform)
-    shuffle = (key == 'train') and not args.sequential
-
-    # Sequential dataloading disabled for now.
-    dataloaders[key] = build_geom_dataset.GeomDrugsDataLoader(
-        sequential=args.sequential, dataset=dataset, batch_size=args.batch_size,
-        shuffle=shuffle)
+    if is_ddp and key == 'train' and not args.sequential:
+        train_sampler = DistributedSampler(dataset, shuffle=True)
+        dataloaders[key] = torch.utils.data.DataLoader(
+            dataset, batch_size=args.batch_size, sampler=train_sampler,
+            collate_fn=build_geom_dataset.collate_fn, drop_last=False)
+    else:
+        shuffle = (key == 'train') and not args.sequential
+        dataloaders[key] = build_geom_dataset.GeomDrugsDataLoader(
+            sequential=args.sequential, dataset=dataset,
+            batch_size=args.batch_size, shuffle=shuffle)
 del split_data
 
 atom_encoder = dataset_info['atom_encoder']
@@ -331,8 +346,9 @@ else:
     mode = 'online' if args.online else 'offline'
 kwargs = {'entity': args.wandb_usr, 'name': args.exp_name, 'project': 'e3_dmd_geom', 'config': args,
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
-wandb.init(**kwargs)
-wandb.save('*.txt')
+if local_rank == 0:
+    wandb.init(**kwargs)
+    wandb.save('*.txt')
 
 data_dummy = next(iter(dataloaders['train']))
 
@@ -533,19 +549,7 @@ def main():
                 print(f"WARNING: No G checkpoint found at {args.student_path}, "
                       f"keeping teacher initialization for G.")
 
-    # Initialize dataparallel if enabled and possible.
-    if args.dp and torch.cuda.device_count() > 1:
-        print(f'Training using {torch.cuda.device_count()} GPUs')
-        G_dp = torch.nn.DataParallel(G.cpu())
-        G_dp = G_dp.cuda()
-        mu_real_dp = torch.nn.DataParallel(mu_real.cpu())
-        mu_real_dp = mu_real_dp.cuda()
-        mu_fake_dp = torch.nn.DataParallel(mu_fake.cpu())
-        mu_fake_dp = mu_fake_dp.cuda()
-    else:
-        G_dp = G
-        mu_real_dp = mu_real
-        mu_fake_dp = mu_fake
+    G_dp = G   # No DataParallel — gradient sync is handled by sync_gradients() in train_dmd.py
 
     # Initialize EMA over G only (mu_fake does not need EMA).
     if args.ema_decay > 0:
@@ -565,7 +569,7 @@ def main():
             except FileNotFoundError:
                 print(f"WARNING: G_ema{ep_suffix}.npy not found, initialising EMA from current G weights")
 
-        G_ema_dp = torch.nn.DataParallel(G_ema) if args.dp and torch.cuda.device_count() > 1 else G_ema
+        G_ema_dp = G_ema
     else:
         ema      = None
         G_ema    = G
@@ -581,9 +585,11 @@ def main():
     best_nll_test = 1e8
     for epoch in range(args.start_epoch, args.n_epochs):
         start_epoch = time.time()
+        if train_sampler is not None:
+            train_sampler.set_epoch(epoch)
         train_epoch(args=args, loader=dataloaders['train'], epoch=epoch,
-                    mu_real=mu_real_dp, G=G, G_ema=G_ema, G_dp=G_dp,
-                    mu_fake=mu_fake_dp,
+                    mu_real=mu_real, G=G, G_ema=G_ema, G_dp=G_dp,
+                    mu_fake=mu_fake,
                     ema=ema, device=device, dtype=dtype,
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
@@ -594,7 +600,7 @@ def main():
 
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 
-        if epoch % args.test_epochs == 0:
+        if local_rank == 0 and epoch % args.test_epochs == 0:
             epoch_metrics = {}
 
             if isinstance(G, en_diffusion.EnVariationalDiffusion):
