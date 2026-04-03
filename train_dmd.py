@@ -494,6 +494,13 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
     wandb.log(validity_dict, commit=False)
     if rdkit_tuple is not None:
         wandb.log({'Validity': rdkit_tuple[0][0], 'Uniqueness': rdkit_tuple[0][1], 'Novelty': rdkit_tuple[0][2]}, commit=False)
+
+    with open(f'{args.exp_name}.txt', 'a') as f:
+        f.write(f'Epoch {epoch}: {validity_dict}')
+        if rdkit_tuple is not None:
+            f.write(f', Validity: {rdkit_tuple[0][0]:.4f}, Uniqueness: {rdkit_tuple[0][1]:.4f}, Novelty: {rdkit_tuple[0][2]:.4f}')
+        f.write('\n')
+
     return validity_dict
 
 
