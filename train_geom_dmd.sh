@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
 python main_geom_dmd.py \
   --exp_name dmd_drug_8step_b64 \

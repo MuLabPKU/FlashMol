@@ -130,36 +130,24 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # D is trained to distinguish real from fake mu_fake features.
         # gan_coeff scales L_disc only; no separate mu_fake GAN term.
         # ================================================================
-        if epoch <= args.gan_pos :
-            discriminator.detach_hook = True
-        else :
-            discriminator.detach_hook = False   # Do not detach hook features during mu_fake/D update
+
         for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
             L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                                    node_mask, edge_mask, context, z_fake_e_d)
 
-            logit_D_fake = discriminator._forward(discriminator.mu_fake_out_2, 
-                                                  discriminator.mu_fake_out_5,
-                                                  discriminator.mu_fake_out_7,
-                                                  node_mask, edge_mask)     # log D(fake) [B]
+            logit_D_fake = 0
 
             # mu_fake forward on real x_t → hook captures real bottleneck features
             x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
             mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
-            logit_D_real = discriminator._forward(discriminator.mu_fake_out_2, 
-                                                  discriminator.mu_fake_out_5,
-                                                  discriminator.mu_fake_out_7,
-                                                  node_mask, edge_mask)     # log D(real) [B]
-
+            logit_D_real = 0
             # D loss: -log D(real) - log(1 - D(fake))   [gan_coeff scales the adversarial term]
-            L_disc = F.softplus(-logit_D_real).mean() \
-                    + F.softplus(logit_D_fake).mean()
+            L_disc = 0
             
             # R1 loss:
-            l_r1 = discriminator.r1_loss(logit_D_real, node_mask, edge_mask)
-            
+            l_r1 = 0
 
             if args.clamp :
                 L_fake_diffusion = soft_clamp(L_fake_diffusion)
@@ -173,26 +161,19 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
             if args.log_grad_norm and i % 50 == 0:
                 params_fake = list(mu_fake.dynamics.parameters())
-                params_d = list(discriminator.parameters())
                 gn_fake_diff = grad_norm(L_fake_diffusion, params_fake)
                 gn_disc_fake = grad_norm(gan_coefff * L_disc, params_fake)
-                gn_disc_d = grad_norm(gan_coefff * L_disc, params_d)
-                gn_r1 = grad_norm(l_r1, params_d)
                 wandb.log({
                     "grad_norm/L_fake_diffusion": gn_fake_diff,
                     "grad_norm/L_disc_on_fake": gn_disc_fake,
-                    "grad_norm/L_disc_on_d": gn_disc_d,
-                    "grad_norm/L_r1": gn_r1,
                 }, commit=False)
                 print(f"  [D/mu_fake grad_norm] L_fake_diff: {gn_fake_diff:.4f}, "
-                      f"L_disc_on_fake: {gn_disc_fake:.4f}, L_disc_on_d: {gn_disc_d:.4f}, "
-                      f"L_r1: {gn_r1:.4f}")
+                      f"L_disc_on_fake: {gn_disc_fake:.4f}")
 
             optim_fake.zero_grad()
             optim_d.zero_grad()
             L_fake.backward()
             torch.nn.utils.clip_grad_norm_(mu_fake.parameters(), max_norm=1.0)
-            torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
             if epoch <= args.gan_pos :
                 optim_d.step()
             else :
@@ -204,7 +185,6 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
         # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
         # Keep hook features on graph so L_gan_G gradient flows back to G.
-        discriminator.detach_hook = False
         s_fake = mu_fake.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
@@ -217,11 +197,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                  - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
 
         # GAN generator loss: G wants D to classify fake as real → maximise log D(fake)
-        logit_fake = discriminator._forward(discriminator.mu_fake_out_2, 
-                                                  discriminator.mu_fake_out_5,
-                                                  discriminator.mu_fake_out_7,
-                                                  node_mask, edge_mask)       # [B]
-        L_gan_G = F.softplus(-logit_fake).mean()
+        logit_fake = 0   # [B]
+        L_gan_G = 0
 
         if args.clamp :
             L_dmd = soft_clamp(L_dmd, 10)
@@ -231,7 +208,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         # Consistency loss
 
-        L_consist = G.consistency_loss(G_ema, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
+        L_consist = 0
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + consist_coeff * L_consist
         L_G = L_G / weighting_factor
@@ -259,7 +236,6 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         elif epoch > args.gan_pos:
             if args.log_grad_norm and i % 50 == 0:
                 params_G = list(G.dynamics.parameters())
-                params_d_g = list(discriminator.parameters())
                 gn_dmd = grad_norm(L_dmd, params_G)
                 gn_gan_g = grad_norm(gan_coeffg * L_gan_G, params_G)
                 gn_reg = grad_norm(reg_coeff * L_reg, params_G)
