@@ -644,6 +644,10 @@ def main():
             })
             wandb.log(epoch_metrics, commit=True)
 
+        # Sync all ranks after rank-0 eval so they start the next epoch together.
+        if is_ddp:
+            dist.barrier()
+
 
 if __name__ == "__main__":
     main()

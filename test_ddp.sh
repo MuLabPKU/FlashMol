@@ -1,7 +1,9 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=1,2,3,4
+export CUDA_VISIBLE_DEVICES=1,2,3,4,5,6,7
 
-bash train_ddp.sh 4 \
+# 98894 samples
+
+bash train_ddp.sh 7\
     --exp_name dmd_drug_8step_b32 \
     --teacher_path outputs/drugs_latent2 \
     --train_diffusion \
@@ -18,7 +20,7 @@ bash train_ddp.sh 4 \
     --step_num_pow 1.0 \
     --step_ratio 5 \
     --n_epochs 36 \
-    --batch_size 32 \
+    --batch_size 8 \        
     --n_stability_samples 500 \
     --test_epochs 5 \
     --ema_decay 0.9999 \

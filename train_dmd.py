@@ -11,6 +11,7 @@ import time
 import torch
 import torch.nn.functional as F
 import torch.distributed as dist
+import os
 from equivariant_diffusion import utils as diffusion_utils
 
 
@@ -41,6 +42,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
                 reg_coeff, step_ratio, step_num):
 
     T = mu_real.T
+    is_rank0 = not dist.is_initialized() or dist.get_rank() == 0
+    log_file = f'./results/{args.exp_name}.txt'
+    if is_rank0:
+        os.makedirs('./results', exist_ok=True)
+
     if epoch <= args.tmin_liftpos :
         Tmin = max(1, int(args.Tminpre * T)) # This used to be 0.8 in previous training parts
     else :
@@ -148,7 +154,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
             if args.log_grad_norm and i % 50 == 0:
                 params_fake = list(mu_fake.dynamics.parameters())
                 gn_fake_diff = grad_norm(L_fake_diffusion, params_fake)
-                wandb.log({"grad_norm/L_fake_diffusion": gn_fake_diff}, commit=False)
+                if wandb.run is not None:
+                    wandb.log({"grad_norm/L_fake_diffusion": gn_fake_diff}, commit=False)
+                if is_rank0:
+                    with open(log_file, 'a') as f:
+                        f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_fake_diffusion={gn_fake_diff:.4f}\n')
                 print(f"  [mu_fake grad_norm] L_fake_diff: {gn_fake_diff:.4f}")
 
             optim_fake.zero_grad()
@@ -204,10 +214,14 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
                 params_G = list(G.dynamics.parameters())
                 gn_dmd = grad_norm(L_dmd, params_G)
                 gn_reg = grad_norm(reg_coeff * L_reg, params_G)
-                wandb.log({
-                    "grad_norm/L_dmd": gn_dmd,
-                    "grad_norm/L_reg": gn_reg,
-                }, commit=False)
+                if wandb.run is not None:
+                    wandb.log({
+                        "grad_norm/L_dmd": gn_dmd,
+                        "grad_norm/L_reg": gn_reg,
+                    }, commit=False)
+                if is_rank0:
+                    with open(log_file, 'a') as f:
+                        f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_dmd={gn_dmd:.4f}, grad_norm/L_reg={gn_reg:.4f}\n')
                 print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_reg: {gn_reg:.4f}")
             optim_G.zero_grad()
             L_G.backward()
@@ -229,12 +243,17 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
                   f"L_reg: {L_reg.item():.4f}, "
                   f"L_fake_diffusion: {L_fake_diffusion.item():.4f}")
-            wandb.log({
-                "loss/L_G": L_G.item(),
-                "loss/L_dmd": L_dmd.item(),
-                "loss/L_reg": L_reg.item(),
-                "loss/L_fake_diffusion": L_fake_diffusion.item(),
-            }, commit=False)
+            if wandb.run is not None:
+                wandb.log({
+                    "loss/L_G": L_G.item(),
+                    "loss/L_dmd": L_dmd.item(),
+                    "loss/L_reg": L_reg.item(),
+                    "loss/L_fake_diffusion": L_fake_diffusion.item(),
+                }, commit=False)
+            if is_rank0:
+                with open(log_file, 'a') as f:
+                    f.write(f'Epoch {epoch}, iter {i}: loss/L_G={L_G.item():.4f}, loss/L_dmd={L_dmd.item():.4f}, '
+                            f'loss/L_reg={L_reg.item():.4f}, loss/L_fake_diffusion={L_fake_diffusion.item():.4f}\n')
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
                 and not (epoch == 0 and i == 0) and args.train_diffusion:
@@ -252,7 +271,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
 
         if args.break_train_epoch:
             break
-    wandb.log({"Train Epoch Loss": np.mean(loss_epoch) if loss_epoch else float('nan')}, commit=True) # record the loss for every epoch
+    if wandb.run is not None:
+        wandb.log({"Train Epoch Loss": np.mean(loss_epoch) if loss_epoch else float('nan')}, commit=True) # record the loss for every epoch
+    if is_rank0:
+        with open(log_file, 'a') as f:
+            f.write(f'Epoch {epoch}: Train Epoch Loss={np.mean(loss_epoch) if loss_epoch else float("nan"):.4f}\n')
 
 
 def encode_to_latent_space(model, x, h, node_mask, edge_mask, context):
@@ -418,9 +441,10 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
     molecules = {key: torch.cat(molecules[key], dim=0) for key in molecules}
     validity_dict, rdkit_tuple = analyze_stability_for_molecules(molecules, dataset_info)
 
-    wandb.log(validity_dict, commit=False)
-    if rdkit_tuple is not None:
-        wandb.log({'Validity': rdkit_tuple[0][0], 'Uniqueness': rdkit_tuple[0][1], 'Novelty': rdkit_tuple[0][2]}, commit=False)
+    if wandb.run is not None:
+        wandb.log(validity_dict, commit=False)
+        if rdkit_tuple is not None:
+            wandb.log({'Validity': rdkit_tuple[0][0], 'Uniqueness': rdkit_tuple[0][1], 'Novelty': rdkit_tuple[0][2]}, commit=False)
 
     with open(f'./results/{args.exp_name}.txt', 'a') as f:
         f.write(f'Epoch {epoch}: {validity_dict}')
