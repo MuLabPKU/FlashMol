@@ -18,6 +18,7 @@ import torch
 import time
 import pickle
 import os
+import datetime
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 
@@ -176,7 +177,7 @@ local_rank = int(os.environ.get('LOCAL_RANK', 0))
 world_size  = int(os.environ.get('WORLD_SIZE', 1))
 is_ddp = world_size > 1
 if is_ddp:
-    dist.init_process_group(backend='nccl')
+    dist.init_process_group(backend='nccl', timeout=datetime.timedelta(hours=2))
     torch.cuda.set_device(local_rank)
 
 data_file = './data/geom/geom_drugs_30.npy'

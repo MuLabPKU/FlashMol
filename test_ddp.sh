@@ -20,7 +20,7 @@ bash train_ddp.sh 7\
     --step_num_pow 1.0 \
     --step_ratio 5 \
     --n_epochs 36 \
-    --batch_size 8 \        
+    --batch_size 8 \
     --n_stability_samples 500 \
     --test_epochs 5 \
     --ema_decay 0.9999 \
