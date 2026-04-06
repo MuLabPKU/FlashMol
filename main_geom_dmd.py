@@ -204,9 +204,10 @@ for key, data_list in zip(['train', 'val', 'test'], split_data):
             collate_fn=build_geom_dataset.collate_fn, drop_last=False)
     else:
         shuffle = (key == 'train') and not args.sequential
+        drop_last = key in ('val', 'test')
         dataloaders[key] = build_geom_dataset.GeomDrugsDataLoader(
             sequential=args.sequential, dataset=dataset,
-            batch_size=args.batch_size, shuffle=shuffle)
+            batch_size=args.batch_size, shuffle=shuffle, drop_last=drop_last)
 del split_data
 
 atom_encoder = dataset_info['atom_encoder']
