@@ -55,12 +55,13 @@ def retrieve_dataloaders(cfg):
             dataset = build_geom_dataset.GeomDrugsDataset(data_list,
                                                           transform=transform)
             shuffle = (key == 'train') and not cfg.sequential
+            drop_last = key in ('val', 'test')
 
             # Sequential dataloading disabled for now.
             dataloaders[key] = build_geom_dataset.GeomDrugsDataLoader(
                 sequential=cfg.sequential, dataset=dataset,
                 batch_size=cfg.batch_size,
-                shuffle=shuffle)
+                shuffle=shuffle, drop_last=drop_last)
         del split_data
         charge_scale = None
     else:

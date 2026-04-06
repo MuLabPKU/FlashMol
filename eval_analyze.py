@@ -207,7 +207,26 @@ def main():
     dataset_info = get_dataset_info(args.dataset, args.remove_h)
 
     # Load model
-    generative_model, nodes_dist, prop_dist = get_latent_diffusion(args, device, dataset_info, dataloaders['train'])
+    # For DMD checkpoints, the saved args may not match the teacher's architecture
+    # config (e.g. normalization_factor). Use teacher's args to build the model.
+    model_args = args
+    teacher_path = getattr(args, 'teacher_path', None)
+    if teacher_path is not None:
+        teacher_args_file = join(teacher_path, 'args.pickle')
+        if os.path.exists(teacher_args_file):
+            with open(teacher_args_file, 'rb') as f:
+                model_args = pickle.load(f)
+            # Sync runtime overrides from DMD args
+            model_args.device = args.device
+            model_args.cuda = args.cuda
+            model_args.step_num = args.step_num
+            if not hasattr(model_args, 'normalization_factor'):
+                model_args.normalization_factor = 1
+            if not hasattr(model_args, 'aggregation_method'):
+                model_args.aggregation_method = 'sum'
+            print(f"Using teacher config from: {teacher_args_file}")
+
+    generative_model, nodes_dist, prop_dist = get_latent_diffusion(model_args, device, dataset_info, dataloaders['train'])
     if prop_dist is not None:
         property_norms = compute_mean_mad(dataloaders, args.conditioning, args.dataset)
         prop_dist.set_normalizer(property_norms)
