@@ -24,6 +24,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from qm9.utils import prepare_context, compute_mean_mad
 from train_dmd import train_epoch, test, analyze_and_save
+from dmd.discriminator import MolecularDiscriminator
 
 parser = argparse.ArgumentParser(description='DMDMolGen_GEOM')
 parser.add_argument('--exp_name', type=str, default='debug_10')
@@ -442,6 +443,17 @@ if args.train_diffusion:
         # in_node_nf must equal args.nf (mu_fake's EGNN hidden_nf — what the hook captures).
         # attach_to() registers a forward hook on mu_fake.egnn.embedding_out.
 
+        # Discriminator: classification head tapping mu_fake's EGNN blocks.
+        discriminator = MolecularDiscriminator(
+            in_node_nf=args.nf,
+            n_dims=3,
+            r1_weight=args.r1_weight,
+            r1_sigma=args.r1_sigma,
+            device=device)
+        discriminator.attach_to(mu_fake, hook_layer='e_block_0')
+        discriminator.attach_to(mu_fake, hook_layer='e_block_1')
+        discriminator.attach_to(mu_fake, hook_layer='e_block_2')
+
     else:
         # Progressive distillation requires a teacher model
         raise ValueError(
@@ -457,9 +469,11 @@ if prop_dist is not None:
 mu_real = mu_real.to(device)
 G = G.to(device)
 mu_fake = mu_fake.to(device)
+discriminator = discriminator.to(device)
 
 optim_G = torch.optim.AdamW(G.dynamics.parameters(), lr=args.G_lr, amsgrad=True, weight_decay=1e-12)
 optim_fake = torch.optim.AdamW(mu_fake.dynamics.parameters(), lr=args.mu_fake_lr, amsgrad=True, weight_decay=1e-12)
+optim_d = torch.optim.AdamW(discriminator.parameters(), lr=args.disc_lr, amsgrad=True, weight_decay=1e-12)
 
 gradnorm_queue = utils.Queue()
 # Start with conservative value to prevent early gradient explosion
@@ -472,14 +486,16 @@ def check_mask_correct(variables, node_mask):
             assert_correctly_masked(variable, node_mask)
 
 
-def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, optim_G, optim_fake, suffix=''):
+def save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator, optim_G, optim_fake, optim_d, suffix=''):
     """Save all DMD model states. suffix='' for best, suffix='_N' for periodic."""
     out = 'outputs/%s' % args.exp_name
     args.current_epoch = epoch + 1
-    utils.save_model(G,          f'{out}/G{suffix}.npy')
-    utils.save_model(mu_fake,    f'{out}/mu_fake{suffix}.npy')
-    utils.save_model(optim_G,    f'{out}/optim_G{suffix}.npy')
-    utils.save_model(optim_fake, f'{out}/optim_fake{suffix}.npy')
+    utils.save_model(G,              f'{out}/G{suffix}.npy')
+    utils.save_model(mu_fake,        f'{out}/mu_fake{suffix}.npy')
+    utils.save_model(discriminator,  f'{out}/discriminator{suffix}.npy')
+    utils.save_model(optim_G,        f'{out}/optim_G{suffix}.npy')
+    utils.save_model(optim_fake,     f'{out}/optim_fake{suffix}.npy')
+    utils.save_model(optim_d,        f'{out}/optim_d{suffix}.npy')
     if G_ema is not None:
         utils.save_model(G_ema,  f'{out}/G_ema{suffix}.npy')
     with open(f'{out}/args{suffix}.pickle', 'wb') as f:
@@ -509,6 +525,17 @@ def main():
         except FileNotFoundError:
             print(f"WARNING: {mu_fake_path} not found, mu_fake starts from teacher weights")
 
+        # --- discriminator ---
+        disc_path = join(args.resume, f'discriminator{ep_suffix}.npy')
+        try:
+            discriminator.load_state_dict(torch.load(disc_path, map_location=device))
+            print(f"Loaded discriminator from: {disc_path}")
+        except FileNotFoundError:
+            print(f"WARNING: discriminator not found, starting fresh")
+        # Re-register hooks (not in state_dict)
+        discriminator.attach_to(mu_fake, hook_layer='e_block_0')
+        discriminator.attach_to(mu_fake, hook_layer='e_block_1')
+        discriminator.attach_to(mu_fake, hook_layer='e_block_2')
 
         # --- optimizers ---
         if not args.fresh_optim:
@@ -524,14 +551,26 @@ def main():
             except FileNotFoundError:
                 print(f"WARNING: optim_fake{ep_suffix}.npy not found, starting with fresh optimizer state")
 
+            try:
+                optim_d.load_state_dict(torch.load(join(args.resume, f'optim_d{ep_suffix}.npy'), map_location=device))
+                print("Loaded optim_d state from checkpoint")
+            except FileNotFoundError:
+                print(f"WARNING: optim_d not found, starting fresh")
+
             # Override learning rates from command line (load_state_dict restores old lr)
             for pg in optim_G.param_groups:
                 pg['lr'] = args.G_lr
             for pg in optim_fake.param_groups:
                 pg['lr'] = args.mu_fake_lr
+            for pg in optim_d.param_groups:
+                pg['lr'] = args.disc_lr
             print(f"Overriding lr: G_lr={args.G_lr}, mu_fake_lr={args.mu_fake_lr}, disc_lr={args.disc_lr}")
         else:
             print("fresh_optim=True: reinitializing all optimizer states")
+
+        # Override r1 params from command line
+        discriminator.r1_sigma = args.r1_sigma
+        discriminator.r1_weight = args.r1_weight
 
         print(f"Successfully resumed from epoch {args.start_epoch}")
 
@@ -591,11 +630,12 @@ def main():
             train_sampler.set_epoch(epoch)
         train_epoch(args=args, loader=dataloaders['train'], epoch=epoch,
                     mu_real=mu_real, G=G, G_ema=G_ema, G_dp=G_dp,
-                    mu_fake=mu_fake,
+                    mu_fake=mu_fake, discriminator=discriminator,
                     ema=ema, device=device, dtype=dtype,
                     property_norms=property_norms, nodes_dist=nodes_dist,
                     dataset_info=dataset_info, gradnorm_queue=gradnorm_queue,
                     optim_G=optim_G, optim_fake=optim_fake,
+                    optim_d=optim_d, gan_coeffg=args.gan_coeffg, gan_coefff=args.gan_coefff,
                     prop_dist=prop_dist,
                     reg_coeff=args.reg_coeff, step_ratio=args.step_ratio,
                     step_num=args.step_num)
@@ -628,13 +668,13 @@ def main():
                 best_nll_test = nll_test
                 if args.save_model:
                     # Best checkpoint — no epoch suffix
-                    save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake,
-                                        optim_G, optim_fake, suffix='')
+                    save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator,
+                                        optim_G, optim_fake, optim_d, suffix='')
 
             # Periodic checkpoint — epoch-numbered
             if args.save_model:
-                save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake,
-                                    optim_G, optim_fake, suffix=f'_{epoch}')
+                save_dmd_checkpoint(args, epoch, G, G_ema, mu_fake, discriminator,
+                                    optim_G, optim_fake, optim_d, suffix=f'_{epoch}')
                 print(f'Saved periodic checkpoint for epoch {epoch}')
 
             print('Val loss: %.4f \t Test loss:  %.4f' % (nll_val, nll_test))

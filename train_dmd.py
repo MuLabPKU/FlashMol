@@ -36,9 +36,9 @@ def grad_norm(loss, params, retain_graph=True):
     return total ** 0.5
 
 
-def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
+def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discriminator,
                 ema, device, dtype, property_norms, nodes_dist, gradnorm_queue,
-                dataset_info, prop_dist, optim_G, optim_fake,
+                dataset_info, prop_dist, optim_G, optim_fake, optim_d, gan_coeffg, gan_coefff,
                 reg_coeff, step_ratio, step_num):
 
     T = mu_real.T
@@ -52,6 +52,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
     else :
         Tmin = max(1, int(args.Tmin * T))
     Tmax = int(0.98 * T)
+
+    if epoch <= args.gan_pos:
+        gan_coefff = 1
 
     G_dp.train()
     G.train()
@@ -144,29 +147,73 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
         # mu_fake is trained to denoise fake samples (diffusion loss).
         # ================================================================
 
+        if epoch <= args.gan_pos:
+            discriminator.detach_hook = True
+        else:
+            discriminator.detach_hook = False
+
         for _ in range(step_ratio):
             L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                              node_mask, edge_mask, context, z_fake_e_d)
 
+            logit_D_fake = discriminator._forward(discriminator.mu_fake_out_0,
+                                                  discriminator.mu_fake_out_1,
+                                                  discriminator.mu_fake_out_2,
+                                                  node_mask, edge_mask)
+
+            # mu_fake forward on REAL data -> hooks capture real features
+            x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
+            mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
+            logit_D_real = discriminator._forward(discriminator.mu_fake_out_0,
+                                                  discriminator.mu_fake_out_1,
+                                                  discriminator.mu_fake_out_2,
+                                                  node_mask, edge_mask)
+
+            L_disc = F.softplus(-logit_D_real).mean() + F.softplus(logit_D_fake).mean()
+            l_r1 = discriminator.r1_loss(logit_D_real, node_mask, edge_mask)
+
             if args.clamp:
                 L_fake_diffusion = soft_clamp(L_fake_diffusion)
+                L_disc = soft_clamp(L_disc, 5)
+
+            L_fake = L_fake_diffusion + gan_coefff * L_disc + l_r1
 
             if args.log_grad_norm and i % 50 == 0:
                 params_fake = list(mu_fake.dynamics.parameters())
+                params_disc = list(discriminator.parameters())
                 gn_fake_diff = grad_norm(L_fake_diffusion, params_fake)
+                gn_disc_fake = grad_norm(gan_coefff * L_disc, params_fake)
+                gn_disc_d = grad_norm(gan_coefff * L_disc, params_disc)
+                gn_r1 = grad_norm(l_r1, params_disc)
                 if wandb.run is not None:
-                    wandb.log({"grad_norm/L_fake_diffusion": gn_fake_diff}, commit=False)
+                    wandb.log({
+                        "grad_norm/L_fake_diffusion": gn_fake_diff,
+                        "grad_norm/gn_disc_fake": gn_disc_fake,
+                        "grad_norm/gn_disc_d": gn_disc_d,
+                        "grad_norm/gn_r1": gn_r1,
+                    }, commit=False)
                 if is_rank0:
                     with open(log_file, 'a') as f:
-                        f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_fake_diffusion={gn_fake_diff:.4f}\n')
-                print(f"  [mu_fake grad_norm] L_fake_diff: {gn_fake_diff:.4f}")
+                        f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_fake_diffusion={gn_fake_diff:.4f}, '
+                                f'gn_disc_fake={gn_disc_fake:.4f}, gn_disc_d={gn_disc_d:.4f}, gn_r1={gn_r1:.4f}\n')
+                print(f"  [mu_fake grad_norm] L_fake_diff: {gn_fake_diff:.4f}, "
+                      f"gn_disc_fake: {gn_disc_fake:.4f}, gn_disc_d: {gn_disc_d:.4f}, gn_r1: {gn_r1:.4f}")
 
             optim_fake.zero_grad()
-            L_fake_diffusion.backward()
+            optim_d.zero_grad()
+            L_fake.backward()
             sync_gradients(mu_fake)
+            sync_gradients(discriminator)
             torch.nn.utils.clip_grad_norm_(mu_fake.parameters(), max_norm=1.0)
-            optim_fake.step()
+            torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
+            if epoch <= args.gan_pos:
+                optim_d.step()
+            else:
+                optim_fake.step()
+                optim_d.step()
 
+
+        discriminator.detach_hook = False
 
         with torch.no_grad():
             s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
@@ -181,12 +228,20 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
         L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
                  - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
 
+        # Generator GAN loss
+        logit_fake = discriminator._forward(discriminator.mu_fake_out_0,
+                                            discriminator.mu_fake_out_1,
+                                            discriminator.mu_fake_out_2,
+                                            node_mask, edge_mask)
+        L_gan_G = F.softplus(-logit_fake).mean()
+
         if args.clamp:
             L_dmd = soft_clamp(L_dmd, 10)
+            L_gan_G = soft_clamp(L_gan_G, 10)
 
         weighting_factor = (z_fake_e - s_real).abs().mean(dim=[0, 1, 2], keepdim=True)
 
-        L_G = L_dmd + reg_coeff * L_reg
+        L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
         L_G = L_G / weighting_factor
 
         if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
@@ -210,50 +265,69 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake,
             (0.0 * L_G).backward()
             continue
         else:
-            if args.log_grad_norm and i % 50 == 0:
-                params_G = list(G.dynamics.parameters())
-                gn_dmd = grad_norm(L_dmd, params_G)
-                gn_reg = grad_norm(reg_coeff * L_reg, params_G)
-                if wandb.run is not None:
-                    wandb.log({
-                        "grad_norm/L_dmd": gn_dmd,
-                        "grad_norm/L_reg": gn_reg,
-                    }, commit=False)
-                if is_rank0:
-                    with open(log_file, 'a') as f:
-                        f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_dmd={gn_dmd:.4f}, grad_norm/L_reg={gn_reg:.4f}\n')
-                print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_reg: {gn_reg:.4f}")
-            optim_G.zero_grad()
-            L_G.backward()
-            sync_gradients(G)
-            if args.clip_grad:
-                utils.gradient_clipping(G, gradnorm_queue)
-            optim_G.step()
+            if epoch > args.gan_pos:
+                if args.log_grad_norm and i % 50 == 0:
+                    params_G = list(G.dynamics.parameters())
+                    gn_dmd = grad_norm(L_dmd, params_G)
+                    gn_reg = grad_norm(reg_coeff * L_reg, params_G)
+                    gn_gan_g = grad_norm(gan_coeffg * L_gan_G, params_G)
+                    if wandb.run is not None:
+                        wandb.log({
+                            "grad_norm/L_dmd": gn_dmd,
+                            "grad_norm/L_reg": gn_reg,
+                            "grad_norm/gn_gan_g": gn_gan_g,
+                        }, commit=False)
+                    if is_rank0:
+                        with open(log_file, 'a') as f:
+                            f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_dmd={gn_dmd:.4f}, '
+                                    f'grad_norm/L_reg={gn_reg:.4f}, gn_gan_g={gn_gan_g:.4f}\n')
+                    print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_reg: {gn_reg:.4f}, gn_gan_g: {gn_gan_g:.4f}")
+                optim_G.zero_grad()
+                L_G.backward()
+                sync_gradients(G)
+                if args.clip_grad:
+                    utils.gradient_clipping(G, gradnorm_queue)
+                optim_G.step()
 
-        # ================================================================
-        # EMA update on G
-        # ================================================================
-        if ema is not None:
-            ema.update_model_average(G_ema, G)
+                # ================================================================
+                # EMA update on G
+                # ================================================================
+                if ema is not None:
+                    ema.update_model_average(G_ema, G)
 
         loss_epoch.append(L_G.item())
+
+        # Discriminator accuracy
+        acc_real = (logit_D_real > 0).float().mean().item()
+        acc_fake = (logit_D_fake < 0).float().mean().item()
+        acc_d = (acc_real + acc_fake) / 2.0
 
         if i % args.n_report_steps == 0:
             print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
                   f"L_reg: {L_reg.item():.4f}, "
-                  f"L_fake_diffusion: {L_fake_diffusion.item():.4f}")
+                  f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, "
+                  f"L_disc: {L_disc.item():.4f}, L_gan_G: {L_gan_G.item():.4f}, "
+                  f"L_r1: {l_r1.item():.4f}, D_acc: {acc_d:.4f}")
             if wandb.run is not None:
                 wandb.log({
                     "loss/L_G": L_G.item(),
                     "loss/L_dmd": L_dmd.item(),
                     "loss/L_reg": L_reg.item(),
                     "loss/L_fake_diffusion": L_fake_diffusion.item(),
+                    "loss/L_disc": L_disc.item(),
+                    "loss/L_gan_G": L_gan_G.item(),
+                    "loss/L_r1": l_r1.item(),
+                    "disc/acc_real": acc_real,
+                    "disc/acc_fake": acc_fake,
+                    "disc/acc_d": acc_d,
                 }, commit=False)
             if is_rank0:
                 with open(log_file, 'a') as f:
                     f.write(f'Epoch {epoch}, iter {i}: loss/L_G={L_G.item():.4f}, loss/L_dmd={L_dmd.item():.4f}, '
-                            f'loss/L_reg={L_reg.item():.4f}, loss/L_fake_diffusion={L_fake_diffusion.item():.4f}\n')
+                            f'loss/L_reg={L_reg.item():.4f}, loss/L_fake_diffusion={L_fake_diffusion.item():.4f}, '
+                            f'loss/L_disc={L_disc.item():.4f}, loss/L_gan_G={L_gan_G.item():.4f}, '
+                            f'loss/L_r1={l_r1.item():.4f}, D_acc={acc_d:.4f}\n')
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \
                 and not (epoch == 0 and i == 0) and args.train_diffusion:

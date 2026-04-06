@@ -17,7 +17,7 @@ class MolecularDiscriminator(nn.Module):
     def __init__(self, in_node_nf, n_dims, r1_weight=None, r1_sigma=None, device='cpu'):
         super().__init__()
         self.mu_fake_out = None          # instance variable — not shared across instances
-        for i in ['2', '5', '7'] :
+        for i in ['0', '1', '2'] :
             setattr(self, f"mu_fake_out_{i}", None)
         self.r1_weight = r1_weight
         self.r1_sigma = r1_sigma
@@ -115,7 +115,7 @@ class MolecularDiscriminator(nn.Module):
 
         fwd_args = []
 
-        for i in ['2', '5', '7'] :
+        for i in ['0', '1', '2'] :
             h = getattr(self, f"mu_fake_out_{i}")
             epsilon = self.r1_sigma * torch.randn_like(h) 
             # Note that the noise needs not be masked 
