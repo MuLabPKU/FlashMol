@@ -73,11 +73,6 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             gan_coefff = 1
             warm_up = True
 
-        if i <= 500 and epoch == 0 and gan_coeffg != 0:
-            gan_coeffg = 0
-            gan_coefff = 1
-            warm_up = True
-
         x = data['positions'].to(device, dtype)
         node_mask = data['atom_mask'].to(device, dtype).unsqueeze(2)
         edge_mask = data['edge_mask'].to(device, dtype)
@@ -281,7 +276,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             (0.0 * L_G).backward()
             continue
         else:
-            if epoch > args.gan_pos:
+            if not warm_up:
                 if args.log_grad_norm and i % 50 == 0:
                     params_G = list(G.dynamics.parameters())
                     gn_dmd = grad_norm(L_dmd, params_G)
