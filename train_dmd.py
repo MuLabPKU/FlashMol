@@ -53,6 +53,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         Tmin = max(1, int(args.Tmin * T))
     Tmax = int(0.98 * T)
 
+    args_gan_coefff = gan_coefff
+    args_gan_coeffg = gan_coeffg
+
     G_dp.train()
     G.train()
     mu_fake.train()
@@ -62,7 +65,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         warm_up = False
 
+        gan_coefff = args_gan_coefff
+        gan_coeffg = args_gan_coeffg
+
         if epoch <= args.gan_pos:
+            gan_coeffg = 0
             gan_coefff = 1
             warm_up = True
 
