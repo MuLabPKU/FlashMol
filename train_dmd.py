@@ -53,8 +53,11 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         Tmin = max(1, int(args.Tmin * T))
     Tmax = int(0.98 * T)
 
+    warm_up = False
+
     if epoch <= args.gan_pos:
         gan_coefff = 1
+        warm_up = True
 
     G_dp.train()
     G.train()
@@ -62,6 +65,12 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
     loss_epoch = []
     n_iterations = len(loader)
     for i, data in enumerate(loader):
+
+        if i <= 500 and epoch == 0 and gan_coeffg != 0:
+            gan_coeffg = 0
+            gan_coefff = 1
+            warm_up = True
+
         x = data['positions'].to(device, dtype)
         node_mask = data['atom_mask'].to(device, dtype).unsqueeze(2)
         edge_mask = data['edge_mask'].to(device, dtype)
@@ -147,7 +156,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # mu_fake is trained to denoise fake samples (diffusion loss).
         # ================================================================
 
-        if epoch <= args.gan_pos:
+        if warm_up:
             discriminator.detach_hook = True
         else:
             discriminator.detach_hook = False
