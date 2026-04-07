@@ -1426,23 +1426,42 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         return loss
 
 
-    # DMD requires grad
+    @torch.no_grad()
     def sample_chain(self, n_samples, n_nodes, node_mask, edge_mask, context, keep_frames=None):
         """
         Draw samples from the generative model, keep the intermediate states for visualization purposes.
         """
-        chain_flat = super().sample_chain(n_samples, n_nodes, node_mask, edge_mask, context, keep_frames)
 
-        # xh = torch.cat([x, h['categorical'], h['integer']], dim=2)
-        # chain[0] = xh  # Overwrite last frame with the resulting x and h.
+        step_num = keep_frames
 
-        # chain_flat = chain.view(n_samples * keep_frames, *z.size()[1:])
+        step_schedule = torch.arange(step_num, 0.0, -1)
 
-        chain = chain_flat.view(keep_frames, n_samples, *chain_flat.size()[1:])
+        z = self.sample_combined_position_feature_noise(n_samples, n_nodes, node_mask)
+
+        chain = torch.zeros((keep_frames,) + z.size(), device=z.device)
         chain_decoded = torch.zeros(
-            size=(*chain.size()[:-1], self.vae.in_node_nf + self.vae.n_dims), device=chain.device)
+            size=(*chain.size()[:-1], self.vae.in_node_nf + self.vae.n_dims), device=chain.device) 
 
-        for i in range(keep_frames):
+        z = 0
+        # Iteratively sample p(z_s | z_t) for t = 1, ..., T, with s = t - 1.
+        for i, t in enumerate(step_schedule):
+            t = self.t_compute(t, step_num) * self.T
+            t = max(0, int(t) - 1)
+            z = self.one_step_sample_latent(n_samples, n_nodes, node_mask, edge_mask, context, t, z)
+            
+            # Write to chain tensor.
+            write_index = step_num - 1 - i
+            chain[write_index] = self.unnormalize_z(z, node_mask)
+
+        # Finally sample p(x, h | z_0).
+        x, h = self.sample_p_xh_given_z0(z, node_mask, edge_mask, context)
+
+        diffusion_utils.assert_mean_zero_with_mask(x[:, :, :self.n_dims], node_mask)
+
+        xh = torch.cat([x, h['categorical'], h['integer']], dim=2)
+        chain[0] = xh  # Overwrite last frame with the resulting x and h.
+
+        for i in range(step_num):
             z_xh = chain[i]
             diffusion_utils.assert_mean_zero_with_mask(z_xh[:, :, :self.n_dims], node_mask)
 
