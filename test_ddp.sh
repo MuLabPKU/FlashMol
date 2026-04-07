@@ -21,7 +21,7 @@ bash train_ddp.sh 7\
     --step_ratio 5 \
     --n_epochs 36 \
     --batch_size 8 \
-    --n_stability_samples 500 \
+    --n_stability_samples 10000 \
     --test_epochs 5 \
     --ema_decay 0.9999 \
     --G_lr 8e-7 \
