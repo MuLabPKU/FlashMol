@@ -73,6 +73,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             gan_coefff = 1
             warm_up = True
 
+        if epoch == 0 and not warm_up and args_gan_coeffg and i <= 3000:
+            gan_coefff = 1
+            warm_up = True
+
         x = data['positions'].to(device, dtype)
         node_mask = data['atom_mask'].to(device, dtype).unsqueeze(2)
         edge_mask = data['edge_mask'].to(device, dtype)
@@ -217,7 +221,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             sync_gradients(discriminator)
             torch.nn.utils.clip_grad_norm_(mu_fake.parameters(), max_norm=1.0)
             torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
-            if epoch <= args.gan_pos:
+            if warm_up:
                 optim_d.step()
             else:
                 optim_fake.step()
