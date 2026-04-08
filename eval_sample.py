@@ -206,6 +206,12 @@ def main():
     with open(join(eval_args.model_path, pickle_name), 'rb') as f:
         args = pickle.load(f)
 
+    if args.teacher_path == 'outputs/drug_latent2':
+        with open(join(args.teacher_path, pickle_name), 'rb') as f:
+            args = pickle.load(f)
+            
+        print(args.normalization_factor)
+
     # CAREFUL with this -->
     if not hasattr(args, 'normalization_factor'):
         args.normalization_factor = 1
