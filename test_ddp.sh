@@ -11,6 +11,7 @@ bash train_ddp.sh 7\
     --n_layers 4 \
     --latent_nf 2 \
     --normalize_factors '[1,4,10]' \
+    --normalization_factor 1 \
     --diffusion_noise_schedule polynomial_2 \
     --diffusion_noise_precision 1e-5 \
     --diffusion_loss_type l2 \
@@ -22,7 +23,7 @@ bash train_ddp.sh 7\
     --n_epochs 36 \
     --batch_size 8 \
     --n_stability_samples 10000 \
-    --test_epochs 5 \
+    --test_epochs 1 \
     --ema_decay 0.9999 \
     --G_lr 8e-7 \
     --mu_fake_lr 32e-7 \
