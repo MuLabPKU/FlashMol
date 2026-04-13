@@ -1203,7 +1203,8 @@ class EnLatentDiffusion(EnVariationalDiffusion):
 
         z_xh = torch.cat([z_x, z_h['categorical'], z_h['integer']], dim=2)
         diffusion_utils.assert_correctly_masked(z_xh, node_mask)
-        x, h = self.vae.decode(z_xh, node_mask, edge_mask, context)
+        vae_context = context if self.vae.decoder.context_node_nf > 0 else None
+        x, h = self.vae.decode(z_xh, node_mask, edge_mask, vae_context)
 
         return x, h
 
@@ -1213,7 +1214,10 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         x = original[:, :, :self.n_dims]
         h = {'categorical': original[:, :, self.n_dims:self.n_dims + self.num_classes],
              'integer':     original[:, :, self.n_dims + self.num_classes:]}
-        x_mu, x_sig, h_mu, h_sig = self.vae.encode(x, h, node_mask, edge_mask, context)
+        # Only pass context to VAE if its encoder supports conditioning;
+        # the autoencoder may have been trained without conditioning.
+        vae_context = context if self.vae.encoder.context_node_nf > 0 else None
+        x_mu, x_sig, h_mu, h_sig = self.vae.encode(x, h, node_mask, edge_mask, vae_context)
         mu = torch.cat([x_mu, h_mu], dim=2)
         sig = torch.cat([x_sig.expand(-1, -1, self.n_dims), h_sig], dim=2)
         encoded = self.sample_normal(mu, sig, node_mask)
