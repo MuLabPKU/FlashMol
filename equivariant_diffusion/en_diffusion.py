@@ -316,7 +316,9 @@ class EnVariationalDiffusion(torch.nn.Module):
                 f'1 / norm_value = {1. / max_norm_value}')
 
     def phi(self, x, t, node_mask, edge_mask, context):
-        net_out = self.dynamics._forward(t, x, node_mask, edge_mask, context)
+        # Only pass context to dynamics if it actually expects conditioning features.
+        dyn_context = context if self.dynamics.context_node_nf > 0 else None
+        net_out = self.dynamics._forward(t, x, node_mask, edge_mask, dyn_context)
 
         return net_out
 
@@ -1272,7 +1274,8 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         x_latent, h_latent = self.sample_p_xh_given_z0(z0, node_mask, edge_mask, context, fix_noise)
         z0_sampled = torch.cat([x_latent, h_latent['integer']], dim=2)  # [B, N, 3+latent_nf]
         # Decode sampled latent to original data space via VAE decoder.
-        x, h = self.vae.decode(z0_sampled, node_mask, edge_mask, context)
+        vae_context = context if self.vae.decoder.context_node_nf > 0 else None
+        x, h = self.vae.decode(z0_sampled, node_mask, edge_mask, vae_context)
         xh = torch.cat([x, h['categorical'].float(), h['integer'].float()], dim=2)
 
         xh = xh * node_mask
@@ -1343,13 +1346,14 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         x_latent, h_latent = self.sample_p_xh_given_z0(z, node_mask, edge_mask, context, fix_noise)
         z0_sampled = torch.cat([x_latent, h_latent['integer']], dim=2)  # [B, N, 3+latent_nf]
         # Decode sampled latent to original data space via VAE decoder.
-        x, h = self.vae.decode(z0_sampled, node_mask, edge_mask, context)
+        vae_context = context if self.vae.decoder.context_node_nf > 0 else None
+        x, h = self.vae.decode(z0_sampled, node_mask, edge_mask, vae_context)
         xh = torch.cat([x, h['categorical'].float(), h['integer'].float()], dim=2)
 
         xh = xh * node_mask
         return xh
 
-    
+
     def corrupt(self, t, original, n_samples, n_nodes, node_mask, edge_mask, context) :
         t = self.t_compute(t * self.T, self.T)
         t0 = torch.zeros(n_samples, 1, device=original.device)
@@ -1469,7 +1473,8 @@ class EnLatentDiffusion(EnVariationalDiffusion):
             z_xh = chain[i]
             diffusion_utils.assert_mean_zero_with_mask(z_xh[:, :, :self.n_dims], node_mask)
 
-            x, h = self.vae.decode(z_xh, node_mask, edge_mask, context)
+            vae_context = context if self.vae.decoder.context_node_nf > 0 else None
+            x, h = self.vae.decode(z_xh, node_mask, edge_mask, vae_context)
             xh = torch.cat([x, h['categorical'], h['integer']], dim=2)
             chain_decoded[i] = xh
         
