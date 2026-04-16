@@ -256,7 +256,13 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         weighting_factor = (z_fake_e - s_real).abs().mean(dim=[0, 1, 2], keepdim=True)
 
-        L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg
+        x_t_d = x_t.detach()
+        L_forwardkl = G.score(noise_t, x_t_d, bs_data, n_data,
+                                                   node_mask, edge_mask, context)
+        L_forwardkl = L_forwardkl.detach()
+        L_forwardkl = (L_forwardkl * z_fake_t).sum(dim=[1, 2]).mean() / (latent_nf * n_data) 
+
+        L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + args.kl_coeff * L_forwardkl
         L_G = L_G / weighting_factor
 
         if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
