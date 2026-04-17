@@ -258,9 +258,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         x_t_d = x_t.detach()
         L_forwardkl = G.score(noise_t, x_t_d, bs_data, n_data,
-                                                   node_mask, edge_mask, context)
-        L_forwardkl = L_forwardkl.detach()
-        L_forwardkl = (L_forwardkl * z_fake_t).sum(dim=[1, 2]).mean() / (latent_nf * n_data) 
+                                                   node_mask, edge_mask, context, x_e_d)
 
         L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + args.kl_coeff * L_forwardkl
         L_G = L_G / weighting_factor
