@@ -121,6 +121,9 @@ parser.add_argument('--step_num_large', type=int, default=2)
 parser.add_argument('--step_num_liftpos', type=int, default=None)
 parser.add_argument('--step_num_pow', type=float, default=0.75)
 parser.add_argument('--gan_pos', type=int, default=0) # Gan pos now means when the warm up ends
+parser.add_argument('--use_js', type=bool, default=True,
+                    help='Use jenson-shannon as forward kl, direct fwd kl o.w.')
+parser.add_argument('--fdiv_coeff', type=float, default=0)
 parser.add_argument('--t_coupling', type=bool, default=False)
 parser.add_argument('--t_coupling_coeff', type=float, default=0.5)
 parser.add_argument('--clamp', action='store_true')
@@ -249,6 +252,8 @@ if args.resume is not None:
     r1_weight = args.r1_weight
     r1_sigma = args.r1_sigma
     log_grad_norm = args.log_grad_norm
+    fdiv_coeff = args.fdiv_coeff
+    use_js = args.use_js
 
     # Save teacher_path if user wants to change teacher during resume
     teacher_path_override = args.teacher_path
@@ -299,6 +304,8 @@ if args.resume is not None:
     args.r1_weight = r1_weight
     args.r1_sigma = r1_sigma
     args.log_grad_norm = log_grad_norm
+    args.use_js = use_js
+    args.fdiv_coeff = fdiv_coeff
 
     # Handle teacher_path: use override if provided, else use saved value
     if teacher_path_override is not None:

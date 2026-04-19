@@ -221,7 +221,13 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                                                   discriminator.mu_fake_out_5,
                                                   discriminator.mu_fake_out_7,
                                                   node_mask, edge_mask)       # [B]
-        L_gan_G = F.softplus(-logit_fake).mean()
+        # L_gan_G = F.softplus(-logit_fake).mean()
+
+        r_t = logit_fake / (1 -  logit_fake) # The discriminator is not conditioned on time
+        if args.use_js:
+            h_r = r_t / (r_t + 1)
+        else :
+            h_r = r_t
 
         if args.clamp :
             L_dmd = soft_clamp(L_dmd, 10)
@@ -233,7 +239,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         L_consist = G.consistency_loss(G_ema, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
 
-        L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + consist_coeff * L_consist
+        # L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + consist_coeff * L_consist
+        L_G = L_dmd * (1 + h_r * args.fdiv_coeff)
         L_G = L_G / weighting_factor
 
         if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
