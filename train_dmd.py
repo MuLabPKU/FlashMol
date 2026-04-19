@@ -133,7 +133,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         if epoch <= args.gan_pos :
             discriminator.detach_hook = True
         else :
-            discriminator.detach_hook = False   # Do not detach hook features during mu_fake/D update
+            discriminator.detach_hook = False
         for _ in range(step_ratio):
             # mu_fake forward on fake z_t: hook captures fake bottleneck features + diffusion loss
             # in one forward pass (z0=z_fake_e_d recovers the noise used by corrupt()).
@@ -204,7 +204,6 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
         # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
         # Keep hook features on graph so L_gan_G gradient flows back to G.
-        discriminator.detach_hook = False
         s_fake = mu_fake.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
