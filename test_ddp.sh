@@ -16,8 +16,8 @@ bash train_ddp.sh 8\
     --diffusion_noise_precision 1e-5 \
     --diffusion_loss_type l2 \
     --step_num 8 \
-    --step_num_small 3 \
-    --step_num_large 3 \
+    --step_num_small 0 \
+    --step_num_large 0 \
     --step_num_pow 1.0 \
     --step_ratio 5 \
     --n_epochs 36 \
@@ -29,7 +29,7 @@ bash train_ddp.sh 8\
     --mu_fake_lr 32e-7 \
     --disc_lr 16e-5 \
     --gan_coeffg 0.000 \
-    --gan_coefff 0.000 \
+    --gan_coefff 0.2 \
     --gan_pos -1 \
     --r1_weight 0.001 \
     --r1_sigma 0.01 \
@@ -37,7 +37,8 @@ bash train_ddp.sh 8\
     --Tminpre 0.02 \
     --tmin_liftpos 6 \
     --reg_coeff 0.0 \
-    --kl_coeff 0.0002 \
+    --use_js True \
+    --fdiv_coeff 0.1 \
     --consist_coeff 0.00 \
     --log_grad_norm \
     --no_wandb

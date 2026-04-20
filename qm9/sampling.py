@@ -76,7 +76,7 @@ def sample_chain(args, device, flow, n_tries, dataset_info, prop_dist=None):
     if args.probabilistic_model == 'diffusion':
         one_hot, charges, x = None, None, None
         for i in range(n_tries):
-            chain = flow.sample_chain(n_samples, n_nodes, node_mask, edge_mask, context, keep_frames=min(100, flow.T))
+            chain = flow.sample_chain(n_samples, n_nodes, node_mask, edge_mask, context, keep_frames=min(100, args.step_num))
             chain = reverse_tensor(chain)
 
             # Repeat last frame to see final sample better.
@@ -136,14 +136,34 @@ def sample(args, device, generative_model, dataset_info,
         context = None
 
     if args.probabilistic_model == 'diffusion':
-        x, h = generative_model.one_step_sample(batch_size, max_n_nodes, node_mask, edge_mask, context, fix_noise=fix_noise)
+        from equivariant_diffusion.en_diffusion import LatentDiffusionModel
+        if isinstance(generative_model, LatentDiffusionModel):
+            # DMD model: one_step_sample / few_step_sample return a flat xh tensor
+            with torch.no_grad():
+                step_num = getattr(args, 'step_num', 1)
+                if step_num == 1:
+                    xh = generative_model.one_step_sample(
+                        batch_size, max_n_nodes, node_mask, edge_mask, context,
+                        fix_noise=fix_noise)
+                else:
+                    xh = generative_model.few_step_sample(
+                        step_num, batch_size, max_n_nodes, node_mask, edge_mask,
+                        context, fix_noise=fix_noise)
+
+            n_dims = generative_model.vae.n_dims
+            num_atom_types = generative_model.vae.in_node_nf - int(generative_model.vae.include_charges)
+            x = xh[:, :, :n_dims]
+            one_hot = xh[:, :, n_dims:n_dims + num_atom_types]
+            charges = xh[:, :, n_dims + num_atom_types:]
+        else:
+            x, h = generative_model.sample(
+                batch_size, max_n_nodes, node_mask, edge_mask, context,
+                fix_noise=fix_noise)
+            one_hot = h['categorical']
+            charges = h['integer']
 
         assert_correctly_masked(x, node_mask)
         assert_mean_zero_with_mask(x, node_mask)
-
-        one_hot = h['categorical']
-        charges = h['integer']
-
         assert_correctly_masked(one_hot.float(), node_mask)
         if args.include_charges:
             assert_correctly_masked(charges.float(), node_mask)

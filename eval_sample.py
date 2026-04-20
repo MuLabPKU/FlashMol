@@ -17,6 +17,7 @@ from qm9.analyze import check_stability
 from os.path import join
 from configs.datasets_config import get_dataset_info
 from qm9.utils import prepare_context, compute_mean_mad
+from qm9.sampling import sample_chain
 
 
 def check_mask_correct(variables, node_mask):
@@ -156,6 +157,27 @@ def save_and_sample_fixed_noise(args, eval_args, device, generative_model,
     return one_hot, charges, x
 
 
+def save_and_sample_chain(args, eval_args, device, flow,
+                        n_tries, dataset_info, id_from=0,
+                        num_chains=100):
+
+    for i in range(num_chains):
+        target_path = f'eval/chain_{i}/'
+
+        one_hot, charges, x = sample_chain(
+            args, device, flow, n_tries, dataset_info)
+
+        vis.save_xyz_file(
+            join(eval_args.model_path, target_path), one_hot, charges, x,
+            dataset_info, id_from, name='chain')
+
+        vis.visualize_chain_uncertainty(
+            join(eval_args.model_path, target_path), dataset_info,
+            spheres_3d=True)
+
+    return one_hot, charges, x
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', type=str,
@@ -183,6 +205,12 @@ def main():
 
     with open(join(eval_args.model_path, pickle_name), 'rb') as f:
         args = pickle.load(f)
+
+    if args.teacher_path == 'outputs/drugs_latent2':
+        with open(join(args.teacher_path, pickle_name), 'rb') as f:
+            args = pickle.load(f)
+
+        print(args.normalization_factor)
 
     # CAREFUL with this -->
     if not hasattr(args, 'normalization_factor'):
@@ -246,9 +274,9 @@ def main():
         max_num=100, spheres_3d=True)
 
     print('Sampling visualization chains.')
-    save_and_sample_fixed_noise(
-        args, eval_args, device, generative_model, nodes_dist, prop_dist,
-        dataset_info=dataset_info, num_chains=eval_args.n_tries)
+    save_and_sample_chain(
+      args, eval_args, device, generative_model,
+      eval_args.n_tries, dataset_info=dataset_info, num_chains=eval_args.n_tries)
 
 
 if __name__ == "__main__":

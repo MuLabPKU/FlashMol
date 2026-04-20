@@ -164,9 +164,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         if warm_up:
             discriminator.detach_hook = True
-        else:
+        else :
             discriminator.detach_hook = False
-
         for _ in range(step_ratio):
             L_fake_diffusion = mu_fake.score(noise_t, z_fake_t_d, bs_data, n_data,
                                              node_mask, edge_mask, context, z_fake_e_d)
@@ -232,36 +231,38 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         with torch.no_grad():
             s_real = mu_real.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
+        # mu_fake forward on z_fake_t: triggers hook → discriminator.mu_fake_out = fake features
+        # Keep hook features on graph so L_gan_G gradient flows back to G.
         s_fake = mu_fake.score(noise_t, z_fake_t, bs_data, n_data, node_mask, edge_mask, context)
 
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
         latent_nf = s_fake.shape[-1]
         d_s = (s_fake - s_real).detach() # Note that this is correct according to L_dmd
-        L_dmd = (d_s * z_fake_t).sum(dim=[1, 2]).mean() / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
-
-        # Latent scale regularization: penalize z_fake_e variance mismatch with real latents
-        L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
-                 - x_e.detach().pow(2).sum(dim=[1, 2]).mean()).pow(2)
+        L_dmd = (d_s * z_fake_t).sum(dim=[1, 2]) / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
 
         # Generator GAN loss
         logit_fake = discriminator._forward(discriminator.mu_fake_out_0,
                                             discriminator.mu_fake_out_1,
                                             discriminator.mu_fake_out_2,
                                             node_mask, edge_mask)
-        L_gan_G = F.softplus(-logit_fake).mean()
+        d_x = F.softplus(-logit_fake).mean(dim=0).detach()
+
+        r_t = d_x / (1 -  d_x) # The discriminator is not conditioned on time
+        if args.use_js:
+            h_r = r_t / (r_t + 1)
+        else :
+            h_r = r_t
 
         if args.clamp:
             L_dmd = soft_clamp(L_dmd, 10)
-            L_gan_G = soft_clamp(L_gan_G, 10)
 
         weighting_factor = (z_fake_e - s_real).abs().mean(dim=[0, 1, 2], keepdim=True)
 
-        x_t_d = x_t.detach()
-        L_forwardkl = G.score(noise_t, x_t_d, bs_data, n_data,
-                                                   node_mask, edge_mask, context, x_e_d)
-
-        L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + args.kl_coeff * L_forwardkl
+        L_G = L_dmd * (1 + h_r * args.fdiv_coeff)
+        L_G = L_G.mean()
         L_G = L_G / weighting_factor
+
+        L_dmd = L_dmd.mean()
 
         if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
             print(f"z_fake_e stats: min={z_fake_e.min():.2f}, max={z_fake_e.max():.2f}")
@@ -288,19 +289,14 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                 if args.log_grad_norm and i % 50 == 0:
                     params_G = list(G.dynamics.parameters())
                     gn_dmd = grad_norm(L_dmd, params_G)
-                    gn_reg = grad_norm(reg_coeff * L_reg, params_G)
-                    gn_gan_g = grad_norm(gan_coeffg * L_gan_G, params_G)
                     if wandb.run is not None:
                         wandb.log({
                             "grad_norm/L_dmd": gn_dmd,
-                            "grad_norm/L_reg": gn_reg,
-                            "grad_norm/gn_gan_g": gn_gan_g,
                         }, commit=False)
                     if is_rank0:
                         with open(log_file, 'a') as f:
-                            f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_dmd={gn_dmd:.4f}, '
-                                    f'grad_norm/L_reg={gn_reg:.4f}, gn_gan_g={gn_gan_g:.4f}\n')
-                    print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}, L_reg: {gn_reg:.4f}, gn_gan_g: {gn_gan_g:.4f}")
+                            f.write(f'Epoch {epoch}, iter {i}: grad_norm/L_dmd={gn_dmd:.4f}\n')
+                    print(f"  [G grad_norm] L_dmd: {gn_dmd:.4f}")
                 optim_G.zero_grad()
                 L_G.backward()
                 sync_gradients(G)
@@ -324,18 +320,15 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         if i % args.n_report_steps == 0:
             print(f"\rEpoch: {epoch}, iter: {i}/{n_iterations}, "
                   f"L_G: {L_G.item():.4f}, L_dmd: {L_dmd.item():.4f}, "
-                  f"L_reg: {L_reg.item():.4f}, "
                   f"L_fake_diffusion: {L_fake_diffusion.item():.4f}, "
-                  f"L_disc: {L_disc.item():.4f}, L_gan_G: {L_gan_G.item():.4f}, "
+                  f"L_disc: {L_disc.item():.4f}, "
                   f"L_r1: {l_r1.item():.4f}, D_acc: {acc_d:.4f}")
             if wandb.run is not None:
                 wandb.log({
                     "loss/L_G": L_G.item(),
                     "loss/L_dmd": L_dmd.item(),
-                    "loss/L_reg": L_reg.item(),
                     "loss/L_fake_diffusion": L_fake_diffusion.item(),
                     "loss/L_disc": L_disc.item(),
-                    "loss/L_gan_G": L_gan_G.item(),
                     "loss/L_r1": l_r1.item(),
                     "disc/acc_real": acc_real,
                     "disc/acc_fake": acc_fake,
@@ -344,8 +337,8 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             if is_rank0:
                 with open(log_file, 'a') as f:
                     f.write(f'Epoch {epoch}, iter {i}: loss/L_G={L_G.item():.4f}, loss/L_dmd={L_dmd.item():.4f}, '
-                            f'loss/L_reg={L_reg.item():.4f}, loss/L_fake_diffusion={L_fake_diffusion.item():.4f}, '
-                            f'loss/L_disc={L_disc.item():.4f}, loss/L_gan_G={L_gan_G.item():.4f}, '
+                            f'loss/L_fake_diffusion={L_fake_diffusion.item():.4f}, '
+                            f'loss/L_disc={L_disc.item():.4f}, '
                             f'loss/L_r1={l_r1.item():.4f}, D_acc={acc_d:.4f}\n')
 
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) \

@@ -16,10 +16,7 @@ from qm9 import bond_analyze
 
 
 def save_xyz_file(path, one_hot, charges, positions, dataset_info, id_from=0, name='molecule', node_mask=None):
-    try:
-        os.makedirs(path)
-    except OSError:
-        pass
+    os.makedirs(path, exist_ok=True)
 
     if node_mask is not None:
         atomsxmol = torch.sum(node_mask, dim=1)
