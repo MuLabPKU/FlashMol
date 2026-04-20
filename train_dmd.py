@@ -209,7 +209,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         # DMD loss: stop-grad on score difference, keep grad on z_fake_e (flows to G)
         latent_nf = s_fake.shape[-1]
         d_s = (s_fake - s_real).detach() # Note that this is correct according to L_dmd
-        L_dmd = (d_s * z_fake_t).sum(dim=[1, 2]).mean() / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
+        L_dmd = (d_s * z_fake_t).sum(dim=[1, 2]) / (latent_nf * n_data) # In loss of diffusion it is divided by a denom
 
         # Latent scale regularization: penalize z_fake_e variance mismatch with real latents
         L_reg = (z_fake_e.pow(2).sum(dim=[1, 2]).mean()
@@ -220,9 +220,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                                                   discriminator.mu_fake_out_5,
                                                   discriminator.mu_fake_out_7,
                                                   node_mask, edge_mask)       # [B]
-        # L_gan_G = F.softplus(-logit_fake).mean()
+        L_gan_G = F.softplus(-logit_fake).mean()
+        d_x = F.softplus(-logit_fake).mean(dim=0).detach()
 
-        r_t = logit_fake / (1 -  logit_fake) # The discriminator is not conditioned on time
+        r_t = d_x / (1 -  d_x) # The discriminator is not conditioned on time
         if args.use_js:
             h_r = r_t / (r_t + 1)
         else :
@@ -240,7 +241,10 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
 
         # L_G = L_dmd + gan_coeffg * L_gan_G + reg_coeff * L_reg + consist_coeff * L_consist
         L_G = L_dmd * (1 + h_r * args.fdiv_coeff)
+        L_G = L_G.mean()
         L_G = L_G / weighting_factor
+
+        L_dmd = L_dmd.mean()
 
         if torch.any(torch.isnan(z_fake_e)) or torch.any(z_fake_e.abs() > 50):
             print(f"z_fake_e stats: min={z_fake_e.min():.2f}, max={z_fake_e.max():.2f}")
