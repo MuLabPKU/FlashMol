@@ -180,8 +180,8 @@ def draw_comparables(ax: plt.Axes, points: Sequence[Point], color: str) -> None:
 
 def label_offsets() -> dict[str, Tuple[float, float, str, str]]:
     return {
-        "FlashMol-4": (8, -2, "left", "bold"),
-        "FlashMol-5": (8, 0, "left", "bold"),
+        "FlashMol-4": (8, -10, "left", "bold"),
+        "FlashMol-5": (8, -9, "left", "bold"),
         "FlashMol-8": (10, 8, "left", "bold"),
         "GeoLDM-4": (0, -16, "center", "normal"),
         "GeoLDM-5": (0, -16, "center", "normal"),
