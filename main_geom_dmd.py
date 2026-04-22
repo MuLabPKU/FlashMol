@@ -37,6 +37,7 @@ parser.add_argument('--teacher_epoch', type=int, default=None,
 parser.add_argument('--student_path', type=str, default=None,
                     help='Path to a pre-trained student checkpoint to initialize G/G_ema from. '
                          'Ignored when --resume is set.')
+parser.add_argument('--short', type=bool, default=False)
 
 # Latent Diffusion args
 parser.add_argument('--train_diffusion', action='store_true',

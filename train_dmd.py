@@ -355,6 +355,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                 vis.visualize("outputs/%s/epoch_%d/conditional/" % (args.exp_name, epoch),
                                     dataset_info, wandb=wandb, mode='conditional')
 
+        if (epoch == 0 and i % 8000 == 0 and i != 0 and args.short):
+            break 
+
         if args.break_train_epoch:
             break
     if wandb.run is not None:
