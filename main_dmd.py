@@ -17,6 +17,7 @@ from equivariant_diffusion import utils as flow_utils
 import torch
 import time
 import pickle
+import sys
 from qm9.utils import prepare_context, compute_mean_mad
 from train_dmd import train_epoch, test, analyze_and_save
 from dmd.discriminator import MolecularDiscriminator
@@ -204,10 +205,110 @@ parser.add_argument('--aggregation_method', type=str, default='sum',
                     help='"sum" or "mean"')
 args = parser.parse_args()
 
-dataset_info = get_dataset_info(args.dataset, args.remove_h)
 
-atom_encoder = dataset_info['atom_encoder']
-atom_decoder = dataset_info['atom_decoder']
+def _resolve_first_stage_args(model_args):
+    """Return the autoencoder args used by a latent-diffusion checkpoint."""
+    if getattr(model_args, 'ae_path', None):
+        with open(join(model_args.ae_path, 'args.pickle'), 'rb') as f:
+            return pickle.load(f)
+    return model_args
+
+
+def _cli_provided(flag):
+    return flag in sys.argv[1:]
+
+
+def _load_teacher_args(run_args):
+    if run_args.teacher_path is None:
+        return None
+
+    if run_args.teacher_epoch is not None:
+        teacher_args_file = join(run_args.teacher_path, f'args_{run_args.teacher_epoch}.pickle')
+    else:
+        teacher_args_file = join(run_args.teacher_path, 'args.pickle')
+
+    with open(teacher_args_file, 'rb') as f:
+        teacher_args = pickle.load(f)
+
+    teacher_args.exp_name = basename(run_args.teacher_path)
+    return teacher_args
+
+
+def _sync_run_with_teacher(run_args, teacher_args):
+    """Inherit teacher-coupled settings unless the user explicitly overrode them."""
+    if teacher_args is None:
+        return
+
+    first_stage_args = _resolve_first_stage_args(teacher_args)
+
+    inherited_first_stage = {
+        '--include_charges': ('include_charges', first_stage_args.include_charges),
+        '--remove_h': ('remove_h', first_stage_args.remove_h),
+        '--conditioning': ('conditioning', list(getattr(first_stage_args, 'conditioning', []))),
+        '--latent_nf': ('latent_nf', first_stage_args.latent_nf),
+    }
+    inherited_teacher = {
+        '--dataset': ('dataset', teacher_args.dataset),
+        '--datadir': ('datadir', teacher_args.datadir),
+        '--dequantization': ('dequantization', teacher_args.dequantization),
+        '--normalize_factors': ('normalize_factors', teacher_args.normalize_factors),
+    }
+
+    for flag, (attr, value) in inherited_first_stage.items():
+        if not _cli_provided(flag):
+            setattr(run_args, attr, value)
+
+    for flag, (attr, value) in inherited_teacher.items():
+        if not _cli_provided(flag):
+            setattr(run_args, attr, value)
+
+
+def _assert_teacher_compatible(run_args, teacher_args):
+    """Fail early on config mismatches that otherwise surface as shape errors."""
+    first_stage_args = _resolve_first_stage_args(teacher_args)
+
+    run_conditioning = list(getattr(run_args, 'conditioning', []))
+    teacher_conditioning = list(getattr(first_stage_args, 'conditioning', []))
+    mismatches = []
+
+    if bool(run_args.include_charges) != bool(first_stage_args.include_charges):
+        mismatches.append(
+            f"include_charges differs: run={run_args.include_charges}, "
+            f"teacher_ae={first_stage_args.include_charges}"
+        )
+
+    if run_conditioning != teacher_conditioning:
+        mismatches.append(
+            f"conditioning differs: run={run_conditioning}, "
+            f"teacher_ae={teacher_conditioning}"
+        )
+
+    if bool(run_args.remove_h) != bool(first_stage_args.remove_h):
+        mismatches.append(
+            f"remove_h differs: run={run_args.remove_h}, "
+            f"teacher_ae={first_stage_args.remove_h}"
+        )
+
+    if getattr(run_args, 'latent_nf', None) != getattr(first_stage_args, 'latent_nf', None):
+        mismatches.append(
+            f"latent_nf differs: run={run_args.latent_nf}, "
+            f"teacher_ae={first_stage_args.latent_nf}"
+        )
+
+    if getattr(run_args, 'dataset', None) != getattr(teacher_args, 'dataset', None):
+        mismatches.append(
+            f"dataset differs: run={run_args.dataset}, "
+            f"teacher={teacher_args.dataset}"
+        )
+
+    if mismatches:
+        mismatch_text = "\n".join(f"  - {item}" for item in mismatches)
+        raise ValueError(
+            "Teacher checkpoint is incompatible with the current DMD run.\n"
+            f"{mismatch_text}\n"
+            "Use the same first-stage autoencoder settings as the teacher checkpoint."
+        )
+
 
 # args, unparsed_args = parser.parse_known_args()
 args.wandb_usr = utils.get_wandb_username(args.wandb_usr)
@@ -323,19 +424,18 @@ if args.resume is not None:
     print(f"Starting at epoch: {start_epoch}")
     print(args)
 
+teacher_args = _load_teacher_args(args)
+_sync_run_with_teacher(args, teacher_args)
+if teacher_args is not None:
+    _assert_teacher_compatible(args, teacher_args)
+
+dataset_info = get_dataset_info(args.dataset, args.remove_h)
+
+atom_encoder = dataset_info['atom_encoder']
+atom_decoder = dataset_info['atom_decoder']
+
 if args.teacher_path is not None:
     teacher_exp_name = basename(args.teacher_path)
-
-    # Load teacher args (epoch-specific or best)
-    if args.teacher_epoch is not None:
-        teacher_args_file = join(args.teacher_path, f'args_{args.teacher_epoch}.pickle')
-    else:
-        teacher_args_file = join(args.teacher_path, 'args.pickle')
-
-    with open(teacher_args_file, 'rb') as f:
-        teacher_args = pickle.load(f)
-
-    teacher_args.exp_name = teacher_exp_name
 
     # Careful with this -->
     if not hasattr(args, 'normalization_factor'):
@@ -355,7 +455,7 @@ if args.no_wandb:
     mode = 'disabled'
 else:
     mode = 'online' if args.online else 'offline'
-kwargs = {'entity': args.wandb_usr, 'name': args.exp_name, 'project': 'e3_dmd', 'config': args,
+kwargs = {'entity': args.wandb_usr, 'name': args.exp_name, 'project': 'e3_dmd_conditional', 'config': args,
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 wandb.save('*.txt')
@@ -383,8 +483,6 @@ teacher = None
 if args.train_diffusion:
     # If we have a teacher checkpoint, load its args first to get correct diffusion_steps
     if args.teacher_path is not None:
-        teacher_exp_name = basename(args.teacher_path)
-
         # Determine which checkpoint files to load based on teacher_epoch
         if args.teacher_epoch is not None:
             # Load from specific epoch
@@ -402,6 +500,8 @@ if args.train_diffusion:
             with open(args_file, 'rb') as f:
                 teacher_args = pickle.load(f)
                 teacher_args.exp_name = teacher_exp_name
+                _sync_run_with_teacher(args, teacher_args)
+                _assert_teacher_compatible(args, teacher_args)
         except FileNotFoundError:
             raise FileNotFoundError(
                 f"Teacher args file not found: {args_file}\n"
