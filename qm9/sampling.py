@@ -136,8 +136,8 @@ def sample(args, device, generative_model, dataset_info,
         context = None
 
     if args.probabilistic_model == 'diffusion':
-        from equivariant_diffusion.en_diffusion import LatentDiffusionModel
-        if isinstance(generative_model, LatentDiffusionModel):
+        from equivariant_diffusion.en_diffusion import EnLatentDiffusion
+        if isinstance(generative_model, EnLatentDiffusion):
             # DMD model: one_step_sample / few_step_sample return a flat xh tensor
             with torch.no_grad():
                 step_num = getattr(args, 'step_num', 1)

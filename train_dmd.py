@@ -331,7 +331,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
             vis.visualize(f"outputs/{args.exp_name}/epoch_{epoch}_{i}", dataset_info=dataset_info, wandb=wandb)
             if len(args.conditioning) > 0:
                 vis.visualize("outputs/%s/epoch_%d/conditional/" % (args.exp_name, epoch),
-                                    dataset_info, wandb=wandb, mode='conditional')
+                                    dataset_info, wandb=wandb)
 
         if args.break_train_epoch:
             break
