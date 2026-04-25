@@ -38,10 +38,10 @@ def get_args_gen(dir_path):
     return args_gen
 
 
-def get_generator(dir_path, dataloaders, device, args_gen, property_norms):
+def get_generator(dir_path, dataloaders, device, args_gen, property_norms, epoch):
     dataset_info = get_dataset_info(args_gen.dataset, args_gen.remove_h)
     model, nodes_dist, prop_dist = get_latent_diffusion(args_gen, device, dataset_info, dataloaders['train'])
-    fn = 'generative_model_ema.npy' if args_gen.ema_decay > 0 else 'generative_model.npy'
+    fn = f'G_ema_{epoch}.npy' if args_gen.ema_decay > 0 else 'generative_model.npy'
     model_state_dict = torch.load(join(dir_path, fn), map_location='cpu')
     model.load_state_dict(model_state_dict)
 
@@ -140,7 +140,7 @@ def main_quantitative(args):
     dataloaders = get_dataloader(args_gen)
     property_norms = compute_mean_mad(dataloaders, args_gen.conditioning, args_gen.dataset)
     model, nodes_dist, prop_dist, _ = get_generator(args.generators_path, dataloaders,
-                                                    args.device, args_gen, property_norms)
+                                                    args.device, args_gen, property_norms, args.epoch)
 
     # Create a dataloader with the generator
 
@@ -203,6 +203,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_name', type=str, default='debug_alpha')
     parser.add_argument('--generators_path', type=str, default='outputs/exp_cond_alpha_pretrained')
+    parser.add_argument('--epoch', type=int, default=-1)
     parser.add_argument('--classifiers_path', type=str, default='qm9/property_prediction/outputs/exp_class_alpha_pretrained')
     parser.add_argument('--property', type=str, default='alpha',
                         help="'alpha', 'homo', 'lumo', 'gap', 'mu', 'Cv'")
