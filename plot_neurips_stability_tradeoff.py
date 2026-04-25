@@ -30,6 +30,9 @@ import numpy as np
 DEFAULT_COMPARABLE = (
     "SLDM:50:88.09",
     "AccGeoLDM:16:51.02",
+    "AccGeoLDM-32:32:77.02",
+    "GeoBFN:100:87.2",
+    "GeoRCG (EDM):50:89.08",
     "MOLTD:12:92.53",
 )
 
@@ -124,7 +127,7 @@ def style_axes(ax: plt.Axes) -> None:
         ax.spines[spine_name].set_linewidth(0.95)
         ax.spines[spine_name].set_color("#bcc1c9")
 
-    ax.tick_params(axis="both", labelsize=11, colors="#2f3744", width=0.8)
+    ax.tick_params(axis="both", labelsize=14, colors="#2f3744", width=0.8)
     ax.xaxis.label.set_color("#1d2530")
     ax.yaxis.label.set_color("#1d2530")
 
@@ -187,7 +190,10 @@ def label_offsets() -> dict[str, Tuple[float, float, str, str]]:
         "GeoLDM-5": (0, -16, "center", "normal"),
         "GeoLDM-8": (8, 4, "left", "normal"),
         "AccGeoLDM": (8, -2, "left", "normal"),
-        "MOLTD": (0, 10, "center", "normal"),
+        "AccGeoLDM-32": (8, 8, "left", "normal"),
+        "GeoBFN": (8, -2, "left", "normal"),
+        "GeoRCG (EDM)": (-10, 8, "right", "normal"),
+        "MOLTD": (0, -18, "center", "normal"),
         "SLDM": (-8, 0, "right", "normal"),
     }
 
@@ -196,6 +202,7 @@ def annotate_points(ax: plt.Axes, points: Sequence[Point], color: str, emphasis:
     offsets = label_offsets()
     for point in points:
         dx, dy, ha, weight = offsets.get(point.label, (6, 6, "left", "normal"))
+        zorder = 3 if point.label == "MOLTD" else 8
         ax.annotate(
             point.label,
             (point.nfe, point.stability),
@@ -203,11 +210,11 @@ def annotate_points(ax: plt.Axes, points: Sequence[Point], color: str, emphasis:
             textcoords="offset points",
             ha=ha,
             va="center",
-            fontsize=11 if emphasis else 9.6,
+            fontsize=14 if emphasis else 12.5,
             fontweight=weight,
             color=color,
             alpha=0.98 if emphasis else 0.9,
-            zorder=8,
+            zorder=zorder,
         )
 
 
@@ -224,8 +231,8 @@ def main() -> None:
         {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-            "axes.titlesize": 13,
-            "axes.labelsize": 11,
+            "axes.titlesize": 16,
+            "axes.labelsize": 15,
             "figure.dpi": args.dpi,
             "savefig.dpi": args.dpi,
             "pdf.fonttype": 42,
@@ -258,7 +265,7 @@ def main() -> None:
     all_ys = [point.stability for point in all_points]
     y_min, y_max = padded_limits(all_ys, pad_ratio=0.09)
     ax.set_ylim(max(0.0, y_min), min(100.0, max(100.0, y_max)))
-    ax.set_xlim(3.7, 55.0)
+    ax.set_xlim(3.7, 110.0)
 
     ticks = [4, 8, 12, 16, 32, 50]
     ax.set_xticks(ticks)

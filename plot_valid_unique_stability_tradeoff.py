@@ -58,7 +58,7 @@ def style_axes(ax: plt.Axes) -> None:
         ax.spines[spine_name].set_linewidth(0.95)
         ax.spines[spine_name].set_color("#bcc1c9")
 
-    ax.tick_params(axis="both", labelsize=11, colors="#2f3744", width=0.8)
+    ax.tick_params(axis="both", labelsize=14, colors="#2f3744", width=0.8)
     ax.xaxis.label.set_color("#1d2530")
     ax.yaxis.label.set_color("#1d2530")
 
@@ -79,8 +79,8 @@ def main() -> None:
         {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-            "axes.titlesize": 13,
-            "axes.labelsize": 11,
+            "axes.titlesize": 16,
+            "axes.labelsize": 15,
             "figure.dpi": 300,
             "savefig.dpi": 300,
             "pdf.fonttype": 42,
@@ -144,7 +144,7 @@ def main() -> None:
                 textcoords="offset points",
                 ha=ha,
                 va="center",
-                fontsize=10,
+                fontsize=13,
                 color="#4b3f58",
                 alpha=0.95,
                 zorder=5,
@@ -180,7 +180,7 @@ def main() -> None:
         framealpha=0.96,
         borderpad=0.6,
         handletextpad=0.5,
-        fontsize=10,
+        fontsize=12,
     )
     legend.get_frame().set_edgecolor("#d6dbe3")
     legend.get_frame().set_linewidth(0.8)
