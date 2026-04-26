@@ -157,6 +157,9 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         z_fake_t_d = z_fake_t.detach()
         x_e_d      = x_e.detach()
 
+        with torch.no_grad():
+            x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
+
         # ================================================================
         # MU_FAKE UPDATE  (step_ratio inner steps per 1 G step)
         # mu_fake is trained to denoise fake samples (diffusion loss).
@@ -176,7 +179,6 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
                                                   node_mask, edge_mask)
 
             # mu_fake forward on REAL data -> hooks capture real features
-            x_t = mu_real.corrupt(noise_t, x_e_d, bs_data, n_data, node_mask, edge_mask, context)
             mu_fake.score(noise_t, x_t, bs_data, n_data, node_mask, edge_mask, context)
             logit_D_real = discriminator._forward(discriminator.mu_fake_out_0,
                                                   discriminator.mu_fake_out_1,
@@ -256,7 +258,7 @@ def train_epoch(args, loader, epoch, mu_real, G, G_ema, G_dp, mu_fake, discrimin
         if args.clamp:
             L_dmd = soft_clamp(L_dmd, 10)
 
-        weighting_factor = (z_fake_e - s_real).abs().mean(dim=[0, 1, 2], keepdim=True)
+        weighting_factor = (z_fake_e_d - s_real).abs().mean(dim=[0, 1, 2], keepdim=True)
 
         L_G = L_dmd * (1 + h_r * args.fdiv_coeff)
         L_G = L_G.mean()
