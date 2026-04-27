@@ -29,8 +29,7 @@ for line in open(sys.argv[1]):
     name = os.path.basename(p)
     m = pat.match(name)
     if m:
-        if int(m.group(2)) >= 2000:
-            print(p)
+        continue
     else:
         print(p)
 " "$tmp_all" > "$tmp_filtered"
