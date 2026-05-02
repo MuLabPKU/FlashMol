@@ -30,7 +30,6 @@ from matplotlib.lines import Line2D
 
 DEFAULT_COMPARABLE = (
     "GeoLDM*-4:4:0.0",
-    "GeoLDM*-5:5:0.08",
     "GeoLDM*-8:8:3.67",
     "SLDM:50:88.09",
     "AccGeoLDM-16:16:51.02",
@@ -158,7 +157,7 @@ def style_axes(ax: plt.Axes) -> None:
     ax.spines["bottom"].set_zorder(0)
     ax.spines["left"].set_zorder(0)
 
-    ax.tick_params(axis="both", labelsize=22, colors="#2f3744", width=1.0)
+    ax.tick_params(axis="both", labelsize=26, colors="#2f3744", width=1.0)
     ax.xaxis.label.set_color("#1d2530")
     ax.yaxis.label.set_color("#1d2530")
 
@@ -260,14 +259,8 @@ def should_label_point(point: Point) -> bool:
         "GeoLDM-4",
         "GeoLDM-5",
         "GeoLDM-8",
-        "GeoLDM",
         "GeoLDM*-4",
-        "GeoLDM*-5",
         "GeoLDM*-8",
-        "AccGeoLDM-16",
-        "AccGeoLDM-32",
-        "AccGeoLDM-125",
-        "AccGeoLDM-500",
     }
 
 
@@ -286,7 +279,7 @@ def annotate_points(ax: plt.Axes, points: Sequence[Point], color: str, emphasis:
             textcoords="offset points",
             ha=ha,
             va="center",
-            fontsize=22 if emphasis else 19,
+            fontsize=26 if emphasis else 23,
             fontweight=weight,
             color=color,
             alpha=0.98 if emphasis else 0.9,
@@ -323,14 +316,14 @@ def add_legend(ax: plt.Axes, colors: dict[str, str]) -> None:
     ]
     legend = ax.legend(
         handles=legend_handles,
-        loc="center left",
-        bbox_to_anchor=(1.01, 0.5),
+        loc="lower right",
+        bbox_to_anchor=(1.0, 0.0),
         frameon=True,
         fancybox=False,
         framealpha=0.96,
         facecolor="white",
         edgecolor="#d3d8df",
-        fontsize=16,
+        fontsize=20,
         handlelength=2.0,
         borderpad=0.55,
         labelspacing=0.45,
@@ -350,8 +343,8 @@ def main() -> None:
         {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-            "axes.titlesize": 28,
-            "axes.labelsize": 26,
+            "axes.titlesize": 34,
+            "axes.labelsize": 30,
             "figure.dpi": args.dpi,
             "savefig.dpi": args.dpi,
             "pdf.fonttype": 42,
@@ -397,7 +390,7 @@ def main() -> None:
 
     all_ys = [point.stability for point in all_points]
     y_min, y_max = padded_limits(all_ys, pad_ratio=0.09)
-    ax.set_ylim(max(0.0, y_min), min(100.0, max(100.0, y_max)))
+    ax.set_ylim(max(-1.0, y_min), min(100.0, max(100.0, y_max)))
     ax.set_xlim(3.7, 1200.0)
 
     ticks = [4, 8, 16, 32, 63, 125, 250, 500, 1000]
