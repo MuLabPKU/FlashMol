@@ -1,20 +1,47 @@
 #!/bin/bash
 
-MODEL_PATH="outputs/qm9_latent2"
-N_SAMPLES=20000
-EPOCH=-1
-OUT_FILE="test_qm9_latent2.txt"
+export CUDA_VISIBLE_DEVICES=3
 
-> "$OUT_FILE"
+OUT_FILE="drug_best_models.txt"
 
-for STEPS in 16 32 63 125 250 500 1000; do
-    echo "=== step_num=${STEPS} ===" >> "$OUT_FILE"
+MODEL_PATH="outputs/dmd_drug_4step_node5_run3_20000"
+EPOCH=0
+STEPS=4
+echo "=== model=dmd_drug_4step_node5_run3_20000 | epoch=${EPOCH} | step_num=${STEPS} ===" >> "$OUT_FILE"
+for RUN in 1 2 3; do
+    echo "--- run ${RUN} ---" >> "$OUT_FILE"
     python eval_analyze.py \
         --model_path "$MODEL_PATH" \
-        --n_samples "$N_SAMPLES" \
+        --n_samples 10000 \
         --epoch "$EPOCH" \
         --step_num "$STEPS" | grep 'mol' >> "$OUT_FILE"
-    echo "" >> "$OUT_FILE"
 done
+echo "" >> "$OUT_FILE"
 
-echo "Done. Results in $OUT_FILE"
+MODEL_PATH="outputs/dmd_drug_5step_node5_run3_20000"
+EPOCH=0
+STEPS=5
+echo "=== model=dmd_drug_5step_node5_run3_20000 | epoch=${EPOCH} | step_num=${STEPS} ===" >> "$OUT_FILE"
+for RUN in 1 2 3; do
+    echo "--- run ${RUN} ---" >> "$OUT_FILE"
+    python eval_analyze.py \
+        --model_path "$MODEL_PATH" \
+        --n_samples 10000 \
+        --epoch "$EPOCH" \
+        --step_num "$STEPS" | grep 'mol' >> "$OUT_FILE"
+done
+echo "" >> "$OUT_FILE"
+
+MODEL_PATH="outputs/dmd_drug_8step_node5_run3_20000"
+EPOCH=0
+STEPS=8
+echo "=== model=dmd_drug_8step_node5_run3_20000 | epoch=${EPOCH} | step_num=${STEPS} ===" >> "$OUT_FILE"
+for RUN in 1 2 3; do
+    echo "--- run ${RUN} ---" >> "$OUT_FILE"
+    python eval_analyze.py \
+        --model_path "$MODEL_PATH" \
+        --n_samples 10000 \
+        --epoch "$EPOCH" \
+        --step_num "$STEPS" | grep 'mol' >> "$OUT_FILE"
+done
+echo "" >> "$OUT_FILE"
