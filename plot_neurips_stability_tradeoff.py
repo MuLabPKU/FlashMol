@@ -3,8 +3,7 @@
 
 Example:
     python plot_neurips_stability_tradeoff.py \
-        --comparable SLDM:50:88.09 AccGeoLDM:16:51.02 MOLTD:12:92.53 \
-        --baseline GeoLDM-4:4:12.43 GeoLDM-5:5:27.96 GeoLDM-8:8:70.78 \
+        --baseline GeoLDM-respaced-4:4:12.43 GeoLDM-respaced-5:5:27.96 GeoLDM-respaced-8:8:70.78 \
         --ours FlashMol-4:4:83.89 FlashMol-5:5:87.05 FlashMol-8:8:94.87 \
         --output neurips_stability_tradeoff_flashmol.pdf
 """
@@ -29,8 +28,8 @@ from matplotlib.lines import Line2D
 
 
 DEFAULT_COMPARABLE = (
-    "GeoLDM*-4:4:0.0",
-    "GeoLDM*-8:8:3.67",
+    "GeoLDM-4:4:0.0",
+    "GeoLDM-8:8:3.67",
     "SLDM:50:88.09",
     "AccGeoLDM-16:16:51.02",
     "AccGeoLDM-32:32:77.02",
@@ -39,7 +38,7 @@ DEFAULT_COMPARABLE = (
     "AccGeoLDM-250:250:89.74",
     "AccGeoLDM-500:500:88.93",
     "GeoBFN:100:87.2",
-    "GeoLDM:1000:89.4",
+    "GeoLDM-respaced:1000:89.4",
     "EquiFM:200:88.3",
     "GeoRCG (EDM):50:89.08",
     "MOLTD:12:92.53",
@@ -237,13 +236,13 @@ def label_offsets() -> dict[str, Tuple[float, float, str, str]]:
         "FlashMol-4": (16, -18, "left", "bold"),
         "FlashMol-5": (16, -3, "left", "bold"),
         "FlashMol-8": (16, 15, "left", "bold"),
-        "GeoLDM-4": (-14, -18, "right", "normal"),
-        "GeoLDM-5": (14, -18, "left", "normal"),
-        "GeoLDM-8": (14, 10, "left", "normal"),
-        "GeoLDM": (-14, 11, "right", "normal"),
-        "GeoLDM*-4": (-18, 16, "right", "normal"),
-        "GeoLDM*-5": (14, -38, "left", "normal"),
-        "GeoLDM*-8": (10, 10, "left", "normal"),
+        "GeoLDM-respaced-4": (14, 10, "left", "normal"),
+        "GeoLDM-respaced-5": (14, -18, "left", "normal"),
+        "GeoLDM-respaced-8": (14, 10, "left", "normal"),
+        "GeoLDM-respaced": (-14, 11, "right", "normal"),
+        "GeoLDM-4": (-18, 16, "right", "normal"),
+        "GeoLDM-5": (14, -38, "left", "normal"),
+        "GeoLDM-8": (10, 10, "left", "normal"),
         "AccGeoLDM-16": (14, -10, "left", "normal"),
         "AccGeoLDM-32": (14, 10, "left", "normal"),
         "AccGeoLDM-125": (12, -12, "left", "normal"),
@@ -256,11 +255,10 @@ def should_label_point(point: Point) -> bool:
         "FlashMol-4",
         "FlashMol-5",
         "FlashMol-8",
+        "GeoLDM-respaced-4",
+        "GeoLDM-respaced-5",
         "GeoLDM-4",
-        "GeoLDM-5",
         "GeoLDM-8",
-        "GeoLDM*-4",
-        "GeoLDM*-8",
     }
 
 
@@ -271,7 +269,7 @@ def annotate_points(ax: plt.Axes, points: Sequence[Point], color: str, emphasis:
             continue
         dx, dy, ha, weight = offsets.get(point.label, (6, 6, "left", "normal"))
         zorder = 8
-        display_label = "GeoLDM*" if point.label == "GeoLDM" else point.label
+        display_label = point.label
         ax.annotate(
             display_label,
             (point.nfe, point.stability),
@@ -292,7 +290,7 @@ def annotate_points(ax: plt.Axes, points: Sequence[Point], color: str, emphasis:
                     "shrinkA": 0,
                     "shrinkB": 3,
                 }
-                if point.label in {"GeoLDM*-4", "GeoLDM*-5"}
+                if point.label in {"GeoLDM-4", "GeoLDM-5"}
                 else None
             ),
             zorder=zorder,
@@ -304,8 +302,8 @@ def add_legend(ax: plt.Axes, colors: dict[str, str]) -> None:
         Line2D([], [], linestyle="none", label="Methods (NFE sweeps)"),
         Line2D([0], [0], color=colors["FlashMol"], lw=4.0, marker="o", markersize=10, label="FlashMol"),
         Line2D([0], [0], color=colors["AccGeoLDM"], lw=2.6, marker="o", markersize=8, label="AccGeoLDM"),
+        Line2D([0], [0], color=colors["GeoLDM-respaced"], lw=2.0, marker="o", markersize=8, label="GeoLDM-respaced"),
         Line2D([0], [0], color=colors["GeoLDM"], lw=2.0, marker="o", markersize=8, label="GeoLDM"),
-        Line2D([0], [0], color=colors["GeoLDM*"], lw=2.0, marker="o", markersize=8, label="GeoLDM*"),
         Line2D([], [], linestyle="none", label=""),
         Line2D([], [], linestyle="none", label="Baselines"),
         Line2D([0], [0], color=colors["SLDM"], lw=0, marker="o", markersize=9, markerfacecolor=colors["SLDM"], label="SLDM", alpha=0.85),
@@ -357,8 +355,8 @@ def main() -> None:
 
     colors = {
         "FlashMol": "#8b2f8f",
-        "GeoLDM": "#2b6cb0",
-        "GeoLDM*": "#63b3ed",
+        "GeoLDM-respaced": "#2b6cb0",
+        "GeoLDM": "#63b3ed",
         "AccGeoLDM": "#157f6b",
         "GeoBFN": "#b7791f",
         "EquiFM": "#718096",
@@ -369,8 +367,8 @@ def main() -> None:
 
     style_axes(ax)
     ax.set_xscale("log")
-    draw_baseline_family(ax, baseline_points, colors["GeoLDM"])
-    annotate_points(ax, baseline_points, colors["GeoLDM"], emphasis=False)
+    draw_baseline_family(ax, baseline_points, colors["GeoLDM-respaced"])
+    annotate_points(ax, baseline_points, colors["GeoLDM-respaced"], emphasis=False)
 
     for method_name, method_points in group_points_by_method(comparable_points).items():
         draw_method_series(
