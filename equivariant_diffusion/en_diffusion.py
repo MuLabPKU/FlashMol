@@ -1,6 +1,7 @@
 import sys
+from pathlib import Path
 
-sys.path.append('/Users/wesleysylvan/Documents/Documents/ML/Preliminaries/Survey/Week_4/DMDMolGen')
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from equivariant_diffusion import utils
 import numpy as np
@@ -1497,4 +1498,3 @@ class EnLatentDiffusion(EnVariationalDiffusion):
         t = torch.sqrt(1 + s - torch.sqrt((1 - (t / (step_num + 1)) ** (2 * rho) - s) / (1 - 2 * s)))
         # Note that an additional s is added to avoid NaN
         return t
-

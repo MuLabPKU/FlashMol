@@ -23,7 +23,7 @@ from train_dmd import train_epoch, test, analyze_and_save
 from dmd.discriminator import MolecularDiscriminator
 
 
-parser = argparse.ArgumentParser(description='DMDMolGen_GEOM')
+parser = argparse.ArgumentParser(description='FlashMol_GEOM')
 parser.add_argument('--exp_name', type=str, default='debug_10')
 
 # Teacher-student args
