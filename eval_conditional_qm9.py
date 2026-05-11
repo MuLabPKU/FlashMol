@@ -41,7 +41,10 @@ def get_args_gen(dir_path):
 def get_generator(dir_path, dataloaders, device, args_gen, property_norms, epoch):
     dataset_info = get_dataset_info(args_gen.dataset, args_gen.remove_h)
     model, nodes_dist, prop_dist = get_latent_diffusion(args_gen, device, dataset_info, dataloaders['train'])
-    fn = f'G_ema_{epoch}.npy' if args_gen.ema_decay > 0 else 'generative_model.npy'
+    if epoch >= 0:
+        fn = f'G_ema_{epoch}.npy' if args_gen.ema_decay > 0 else 'generative_model_ema.npy'
+    else:
+        fn = f'generative_model_ema.npy' if args_gen.ema_decay > 0 else 'generative_model_ema.npy' 
     model_state_dict = torch.load(join(dir_path, fn), map_location='cpu')
     model.load_state_dict(model_state_dict)
 
