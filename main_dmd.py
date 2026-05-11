@@ -54,7 +54,7 @@ python main_dmd.py \
   --Tmin 0.002
 '''
 
-parser = argparse.ArgumentParser(description='DMDMolGen')
+parser = argparse.ArgumentParser(description='FlashMol')
 parser.add_argument('--exp_name', type=str, default='debug_10')
 
 # Teacher-student args

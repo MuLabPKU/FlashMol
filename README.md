@@ -1,2 +1,2 @@
-# DMDMolGen
+# FlashMol
 DMD + Molecule Generation

@@ -1,6 +1,7 @@
 import sys
+from pathlib import Path
 
-sys.path.append('/Users/wesleysylvan/Documents/Documents/ML/Preliminaries/Survey/Week_4/DMDMolGen')
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from equivariant_diffusion import utils
 import numpy as np
