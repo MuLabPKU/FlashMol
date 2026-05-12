@@ -1,6 +1,0 @@
-current 16best: dmd_qm9_trial_16steplowlift@5
-Validity over 40000 molecules: 85.86%
-Uniqueness over 34342 valid molecules: 88.21%
-Novelty over 30294 unique valid molecules: 61.60%
-{'mol_stable': 0.741475, 'atm_stable': 0.9677797508393219}
-Overview: val nll -342.0995962999682 test nll -348.5953150222546 {'mol_stable': 0.741475, 'atm_stable': 0.9677797508393219}
