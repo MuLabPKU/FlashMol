@@ -138,13 +138,13 @@ bash train_ddp.sh 8 \
 Analyze sample quality:
 
 ```bash
-python eval_analyze.py --model_path outputs/$exp_name --n_samples 10000 --step_num 8
+python eval_analyze.py --model_path outputs/$exp_name --n_samples 10000
 ```
 
 Visualize generated molecules:
 
 ```bash
-python eval_sample.py --model_path outputs/$exp_name --n_samples 10000 --step_num 8
+python eval_sample.py --model_path outputs/$exp_name --n_samples 10000
 ```
 
 Small note: If you run out of GPU memory, lower the batch size or the number of generated samples.
