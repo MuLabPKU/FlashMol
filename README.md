@@ -88,7 +88,7 @@ python main_dmd.py \
 
 ### For GEOM-DRUGS
 
-Given that the training code for GEOM-DRUGS is slightly different from that of QM9, we provide them in a separate branch GEOM_WITH_DISC. Before, moving on, you may need to switch to the GEOM_WITH_DISC branch. First follow the instructions in [`data/geom/README.md`](data/geom/README.md) to set up the GEOM-DRUGS data.
+Given that the training code for GEOM-DRUGS is slightly different from that of QM9, we provide it in a separate branch GEOM_WITH_DISC. Before, moving on, you may need to switch to the GEOM_WITH_DISC branch. First follow the instructions in [`data/geom/README.md`](data/geom/README.md) to set up the GEOM-DRUGS data.
 
 ```bash
 bash train_ddp.sh 8 \
