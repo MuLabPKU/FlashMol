@@ -1,8 +1,4 @@
-# FlashMol
-
-<p align="center">
-  <strong>High-quality molecule generation in as few as four steps.</strong>
-</p>
+# FlashMol: High-quality molecule generation in as few as four steps
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
