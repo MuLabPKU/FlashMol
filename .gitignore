@@ -42,6 +42,5 @@ schedule.png
 GeoLDM.tar.gz
 4360331
 *.tar.gz
-*.pdf
 results/
 optuna_dbs/
