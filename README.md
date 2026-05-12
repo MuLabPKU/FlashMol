@@ -7,12 +7,14 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
   <a href="https://arxiv.org/abs/2605.07020"><img src="https://img.shields.io/badge/arXiv-2605.07020-b31b1b.svg" alt="FlashMol arXiv"></a>
-  <a href="https://github.com/Sylvan-Wesley/DMDMolGen"><img src="https://img.shields.io/badge/Code-DMDMolGen-blue.svg" alt="Code"></a>
+  <a href="https://github.com/Sylvan-Wesley/DMDMolGen"><img src="https://img.shields.io/badge/Code-FlashMol-blue.svg" alt="Code"></a>
 </p>
 
-<p align="center">
-  <a href="equivariant_diffusion/framework.pdf"><strong>View framework figure</strong></a>
-</p>
+<div align="center">
+  <object data="equivariant_diffusion/training_diagram.pdf" type="application/pdf" width="100%" height="600">
+    <a href="equivariant_diffusion/training_diagram.pdf"><strong>View training diagram PDF</strong></a>
+  </object>
+</div>
 
 Official code release for the paper "[FlashMol: High-Quality Molecule Generation in as Few as Four Steps](https://arxiv.org/abs/2605.07020)".
 
@@ -239,14 +241,17 @@ python eval_conditional_qm9.py \
 Please consider citing FlashMol if you find this repository helpful.
 
 ```bibtex
-@article{wei2026flashmol,
-  title={FlashMol: High-Quality Molecule Generation in as Few as Four Steps},
-  author={Wei, Xinyuan and Li, Zian and Yan, Shaoheng and Zhou, Cai and Zhang, Muhan},
-  journal={arXiv preprint arXiv:2605.07020},
-  year={2026}
+@misc{wei2026flashmolhighqualitymoleculegeneration,
+      title={FlashMol: High-Quality Molecule Generation in as Few as Four Steps}, 
+      author={Xinyuan Wei and Zian Li and Shaoheng Yan and Cai Zhou and Muhan Zhang},
+      year={2026},
+      eprint={2605.07020},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2605.07020}, 
 }
 ```
 
 ## Acknowledgements
 
-This repository builds on the codebases of GeoLDM and AccGeoLDM. Thanks to the authors for their excellent open-source implementations.
+This repository builds on the codebases of [GeoLDM](https://github.com/MinkaiXu/GeoLDM) and [AccGeoLDM](https://github.com/rlacombe/AccGeoLDM). Thanks to the authors for their excellent open-source implementations.
